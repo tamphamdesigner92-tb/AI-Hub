@@ -20,7 +20,14 @@ param(
     # Chỉ in ra sẽ làm gì, không đụng vào đĩa.
     [switch]$DryRun,
     # Ghi biến môi trường ở mức người dùng để app khởi động từ Start Menu cũng thấy.
-    [switch]$SetUserEnv
+    [switch]$SetUserEnv,
+    # Chỉ chuyển những kho này, ví dụ -Only ollama. Mặc định: tất cả.
+    #
+    # Chuyển từng phần là hợp lệ — mỗi cặp cache độc lập với nhau. Nhưng khi đó
+    # ĐỪNG dùng -SetUserEnv: nó ghi cả HF_HOME, TORCH_HOME… trỏ vào kho hub còn
+    # rỗng, và công cụ sẽ tải lại từ đầu thay vì dùng cache cũ vẫn nằm ở chỗ cũ.
+    [ValidateSet('ollama', 'hf', 'whisper', 'torch')]
+    [string[]]$Only
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,7 +39,7 @@ function Die ($m) { Write-Host "✗ $m" -ForegroundColor Red; exit 1 }
 
 $HUB   = Split-Path -Parent $PSScriptRoot
 $STORE = Join-Path $HUB 'models'
-$STATE = Join-Path $HUB '.migration-state.json'
+$statePath = Join-Path $HUB '.migration-state.json'
 $env:OLLAMA_NOPRUNE = '1'
 
 Info "Hub:  $HUB"
@@ -92,6 +99,16 @@ function Get-TreeSize($path) {
     $m = Get-ChildItem -LiteralPath $path -Recurse -File -Force -ErrorAction SilentlyContinue |
          Measure-Object -Sum Length
     [pscustomobject]@{ Files = [int]$m.Count; Bytes = [int64]$m.Sum }
+}
+
+if ($Only) {
+    $pairs = @($pairs | Where-Object { $Only -contains $_.Store })
+    Warn "chỉ chuyển: $($Only -join ', ') — các kho khác giữ nguyên tại chỗ cũ"
+    if ($SetUserEnv) {
+        Die ('-SetUserEnv cùng -Only sẽ trỏ biến của kho chưa chuyển vào thư mục ' +
+             'rỗng, khiến công cụ tải lại từ đầu. Chạy -SetUserEnv sau khi đã ' +
+             'chuyển hết.')
+    }
 }
 
 foreach ($pair in $pairs) {
@@ -186,14 +203,16 @@ Write-Host "     Add-MpPreference -ExclusionPath `"$STORE`""
 
 # ── 7. Ghi lại trạng thái để rollback ────────────────────────────────────────
 if (-not $DryRun) {
-    $state = [ordered]@{
+    $stateData = [ordered]@{
         migrated_at = (Get-Date).ToString('s')
         hub         = $HUB
+        # Chỉ ghi cặp thực sự chuyển lần này; rollback dựa vào đây.
         pairs       = @($pairs | ForEach-Object {
                           [ordered]@{ legacy = $_.Legacy; store = $_.Store } })
     }
-    $state | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $STATE -Encoding UTF8
-    Ok "đã ghi $STATE"
+    $stateData | ConvertTo-Json -Depth 4 |
+        Set-Content -LiteralPath $statePath -Encoding UTF8
+    Ok "đã ghi $statePath"
 }
 
 Write-Host ''

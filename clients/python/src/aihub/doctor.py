@@ -35,9 +35,25 @@ def _readlink(p: Path) -> str | None:
 
 
 def _same(a, b) -> bool:
-    """So sánh hai đường dẫn bất kể hoa/thường và dấu gạch — Windows cần cả hai."""
+    """So sánh hai đường dẫn, chịu được khác biệt hình thức của Windows.
+
+    Junction trả về đích kèm tiền tố extended-length (vd
+    "\\?\E:\AI Hub\models\ollama"). Path.resolve() KHÔNG bỏ tiền tố đó,
+    nên so sánh thẳng sẽ báo "trỏ sai" cho một liên kết hoàn toàn đúng.
+    """
+    unc = '\\\\?\\UNC\\'
+    dev = '\\\\?\\'
+
+    def norm(x):
+        t = str(x)
+        if t.startswith(unc):
+            t = '\\\\' + t[len(unc):]
+        elif t.startswith(dev):
+            t = t[len(dev):]
+        return Path(t).resolve()
+
     try:
-        return Path(a).resolve() == Path(b).resolve()
+        return norm(a) == norm(b)
     except OSError:
         return False
 
@@ -94,8 +110,8 @@ def run(deep: bool = False) -> Report:
         legacy = sd.get("legacy")
         if not legacy:
             continue
-        lp = Path(os.path.expandvars(legacy)).expanduser()
-        label = f"liên kết {lp.name}"
+        lp = plat.expand(legacy)
+        label = f"liên kết {kind}"
         if plat.is_link(lp):
             tgt = _readlink(lp)
             if _same(tgt or "", store / sd["path"]):
