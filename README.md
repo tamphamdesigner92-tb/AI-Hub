@@ -12,20 +12,38 @@ Kho model AI local dùng chung cho mọi dự án trên máy này. Bản Windows
 ## Dùng nhanh
 
 ```powershell
-.\bin\aihubdashboard.cmd    # mở dashboard (tự bật server nếu chưa chạy)
+aihubdashboard              # mở dashboard (tự bật server nếu chưa chạy)
 aihub list                  # xem có model gì
 aihub doctor                # kiểm tra sức khoẻ
 aihub serve                 # bật Ollama với cấu hình của hub
 ```
 
-Để gõ `aihub` ở bất kỳ đâu, nạp biến môi trường một lần cho mỗi terminal:
+Gõ trần như vậy được ở **mọi terminal** — PowerShell lẫn cmd.exe — sau khi thêm
+`bin\` của hub vào PATH người dùng (làm một lần):
 
 ```powershell
-. "E:\AI Hub\env\aihub.ps1"
+$bin = "E:\AI Hub\bin"
+$u = [Environment]::GetEnvironmentVariable('PATH','User')
+if (($u -split ';') -notcontains $bin) {
+    [Environment]::SetEnvironmentVariable('PATH', "$u;$bin", 'User')
+}
+```
+
+> Đọc riêng PATH của `User` rồi nối thêm — đừng dùng `$env:PATH`, vì biến đó là
+> PATH hệ thống trộn với PATH người dùng, ghi ngược lại sẽ nhân đôi toàn bộ mục
+> hệ thống vào hồ sơ của bạn.
+
+**PATH mới chỉ có ở terminal mở sau đó** — cửa sổ đang mở vẫn giữ PATH cũ.
+
+Biến môi trường kho (`OLLAMA_MODELS`, `HF_HOME`…) là chuyện riêng, chỉ cần khi
+dự án của bạn đọc chúng:
+
+```powershell
+. "E:\AI Hub\env\aihub.ps1"     # cho phiên hiện tại
 ```
 
 Muốn tự động ở mọi terminal thì thêm đúng dòng đó vào `$PROFILE`
-(`notepad $PROFILE`).
+(`notepad $PROFILE`), hoặc ghi vĩnh viễn bằng `.\scripts\migrate.ps1 -SetUserEnv`.
 
 ## Cài lần đầu
 
@@ -59,9 +77,14 @@ nhận.
 
 | Cách | Làm gì |
 |---|---|
-| Chạy `.\bin\aihubdashboard.cmd` | Tự bật server nếu đang tắt rồi mở trình duyệt |
+| Gõ `aihubdashboard` | Tự bật server nếu đang tắt rồi mở trình duyệt |
 | Vào thẳng `http://127.0.0.1:7860` | Cần server đang chạy |
 | `aihub web` | Chạy server ở tiền cảnh, Ctrl-C để dừng |
+
+Trình khởi động thăm dò `/api/ping` — route cố ý không chạm đĩa và không hỏi
+Ollama. Dùng `/api/status` để thăm dò là sai: nó có gọi sang Ollama, mà trên
+Windows một kết nối tới cổng không ai nghe phải chờ ~2 giây mới thất bại, nên
+mỗi lần Ollama đang tắt là báo nhầm "dashboard hỏng".
 
 Để dashboard luôn sẵn sàng, đăng ký nó chạy lúc đăng nhập:
 

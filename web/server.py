@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -14,6 +15,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import urllib.parse
 from urllib.parse import parse_qs, urlparse
 
 # Suy ra gốc hub từ vị trí file này (<hub>/web/server.py) — server chạy được
@@ -31,6 +33,23 @@ MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=ut
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
 
 
+def _port_open(url: str, timeout: float = 0.4) -> bool:
+    """Cổng có ai nghe không — trả lời nhanh, không nói chuyện HTTP.
+
+    Cần bước này vì hai hệ điều hành khác nhau đúng ở chỗ đau: kết nối tới một
+    cổng local không ai nghe bị từ chối tức thì trên macOS, nhưng trên Windows
+    phải chờ hết timeout (~2 giây). Thiếu nó, mỗi lần dashboard làm mới mà Ollama
+    đang tắt là treo 2 giây.
+    """
+    try:
+        u = urllib.parse.urlsplit(url)
+        with socket.create_connection((u.hostname or "127.0.0.1", u.port or 80),
+                                      timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def api_status() -> dict:
     store = R.store_root()
     sizes = {}
@@ -39,14 +58,15 @@ def api_status() -> dict:
 
     base = os.environ.get("AIHUB_OLLAMA_URL", "http://127.0.0.1:11434")
     ollama_up, loaded = False, []
-    try:
-        urllib.request.urlopen(base + "/api/tags", timeout=2)
-        ollama_up = True
-        with urllib.request.urlopen(base + "/api/ps", timeout=2) as r:
-            loaded = [{"name": m["name"], "gb": round(m.get("size", 0) / 1e9, 1)}
-                      for m in json.load(r).get("models", [])]
-    except Exception:
-        pass
+    if _port_open(base):
+        try:
+            urllib.request.urlopen(base + "/api/tags", timeout=2)
+            ollama_up = True
+            with urllib.request.urlopen(base + "/api/ps", timeout=2) as r:
+                loaded = [{"name": m["name"], "gb": round(m.get("size", 0) / 1e9, 1)}
+                          for m in json.load(r).get("models", [])]
+        except Exception:
+            pass
 
     ram_total, ram_free = P.ram_gb()
     return {
@@ -101,6 +121,11 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         try:
+            if u.path == "/api/ping":
+                # Thăm dò "server sống chưa" — cố ý không chạm đĩa, không hỏi
+                # Ollama. Trình khởi động dùng route này; thăm dò bằng
+                # /api/status sẽ nhầm "Ollama đang tắt" thành "dashboard hỏng".
+                return self._json({"ok": True})
             if u.path == "/api/models":
                 return self._json(api_models())
             if u.path == "/api/status":

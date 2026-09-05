@@ -1,0 +1,27 @@
+# Kieu xuong dong. Repo nay chay tren ca Windows lan macOS nen phai noi ro,
+# khong the pho mac cho core.autocrlf cua tung may.
+#
+# Vi sao quan trong: mot script shell co CRLF se hong tren macOS/Linux —
+# `#!/bin/zsh\r` bao "bad interpreter". Voi core.autocrlf=true (mac dinh tren
+# nhieu may Windows), clone binh thuong se pha migrate.sh va rollback.sh.
+
+* text=auto
+
+# Script POSIX: LUON LF, ke ca khi checkout tren Windows.
+*.sh            text eol=lf
+bin/aihub       text eol=lf
+bin/aihubdashboard text eol=lf
+
+# Script Windows: CRLF. cmd.exe an toan nhat voi CRLF.
+*.cmd           text eol=crlf
+*.bat           text eol=crlf
+*.ps1           text eol=crlf
+
+# Du lieu doc bang trinh phan tich, khong quan trong kieu xuong dong.
+*.py            text
+*.js            text
+*.json          text
+*.toml          text
+*.md            text
+*.html          text
+*.css           text

@@ -154,6 +154,8 @@ projects = ['E:\du-an\MoneyPrinterTurbo\.venv']
 
 | Triệu chứng | Nguyên nhân | Xử lý |
 |---|---|---|
+| `aihubdashboard` báo "is not recognized" | `bin\` của hub chưa vào PATH | Xem mục **Dùng nhanh** trong README, rồi mở terminal MỚI |
+| Vừa thêm PATH mà vẫn không nhận | Terminal đang mở giữ PATH lúc nó khởi động | Mở cửa sổ mới |
 | `ollama list` rỗng | `%USERPROFILE%\.ollama\models` bị tạo lại thành thư mục thật (thường sau khi Ollama tự update) | `aihub doctor` sẽ báo FAIL → chạy lại `aihub migrate` |
 | Ollama vẫn tải model về `C:` | App khởi động từ Start Menu không thấy `OLLAMA_MODELS` | `.\scripts\migrate.ps1 -SetUserEnv` rồi đăng xuất/đăng nhập lại |
 | Tiếng Việt trong terminal thành ký tự lạ | Output bị chuyển hướng ra file, Python rơi về bảng mã locale | Hub đã tự ép UTF-8; nếu vẫn lỗi thì đặt `PYTHONUTF8=1` |

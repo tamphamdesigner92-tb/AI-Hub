@@ -10,7 +10,8 @@ URL="http://127.0.0.1:$PORT"
 PY="$AIHUB_HOME/.venv/bin/python"
 [ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
 
-if ! curl -sf -m 2 "$URL/api/status" >/dev/null 2>&1; then
+# /api/ping: thăm dò không chạm đĩa, không hỏi Ollama — xem chú thích trong .ps1
+if ! curl -sf -m 3 "$URL/api/ping" >/dev/null 2>&1; then
   echo "Đang bật dashboard…"
   mkdir -p "$AIHUB_HOME/models/run"
   AIHUB_HOME="$AIHUB_HOME" nohup "$PY" "$AIHUB_HOME/web/server.py" "$PORT" --no-open \
@@ -18,12 +19,12 @@ if ! curl -sf -m 2 "$URL/api/status" >/dev/null 2>&1; then
   i=0
   while [ $i -lt 15 ]; do
     sleep 0.4
-    curl -sf -m 2 "$URL/api/status" >/dev/null 2>&1 && break
+    curl -sf -m 3 "$URL/api/ping" >/dev/null 2>&1 && break
     i=$((i + 1))
   done
 fi
 
-if ! curl -sf -m 2 "$URL/api/status" >/dev/null 2>&1; then
+if ! curl -sf -m 3 "$URL/api/ping" >/dev/null 2>&1; then
   echo "Server không lên được. Xem log: $AIHUB_HOME/models/run/web.log" >&2
   exit 1
 fi

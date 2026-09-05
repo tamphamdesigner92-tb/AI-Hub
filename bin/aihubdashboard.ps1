@@ -22,8 +22,11 @@ $url = "http://127.0.0.1:$Port"
 $log = Join-Path $HUB 'models\run\web.log'
 
 function Test-Up {
+    # /api/ping chứ không phải /api/status: status có gọi sang Ollama, mà trên
+    # Windows một kết nối tới cổng không ai nghe mất ~2 giây mới thất bại. Thăm
+    # dò bằng status sẽ báo "dashboard hỏng" mỗi khi Ollama đơn giản là đang tắt.
     try {
-        $null = Invoke-WebRequest -Uri "$url/api/status" -TimeoutSec 2 -UseBasicParsing
+        $null = Invoke-WebRequest -Uri "$url/api/ping" -TimeoutSec 3 -UseBasicParsing
         return $true
     } catch { return $false }
 }
