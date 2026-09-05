@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Hub</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧠</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="logo">🧠</span><b>AI&nbsp;Hub</b>
+    <span class="sub">kho model AI local dùng chung</span></div>
+  <div class="stats" id="stats"><span class="skel">đang tải…</span></div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-view="models">Model</button>
+  <button class="tab" data-view="add">Thêm model</button>
+  <button class="tab" data-view="health">Sức khoẻ</button>
+</nav>
+
+<!-- ───────────────────────── MODEL ───────────────────────── -->
+<main id="view-models" class="view">
+  <div class="filters">
+    <input type="search" id="q" placeholder="Tìm theo tên, thẻ, mô tả…" autocomplete="off">
+    <div class="chips" id="taskChips"></div>
+    <div class="chips" id="statusChips">
+      <button class="chip" data-status="present">● có sẵn</button>
+      <button class="chip" data-status="missing">○ chưa tải</button>
+      <button class="chip" data-status="archive">có thể dọn</button>
+    </div>
+  </div>
+  <div id="grid" class="grid"></div>
+  <p id="empty" class="empty" hidden>Không có model nào khớp bộ lọc.</p>
+</main>
+
+<!-- ───────────────────────── THÊM MODEL ───────────────────────── -->
+<main id="view-add" class="view" hidden>
+  <div class="panel">
+    <h2>Tải model mới về kho</h2>
+    <p class="hint">Mọi model tải về đều nằm trong <code id="storePath">…</code> — không bao giờ vào thư mục dự án.</p>
+
+    <label class="lbl" for="src">Nguồn</label>
+    <div class="row">
+      <input id="src" placeholder="Dán tên model, URL, hay lệnh chép từ HuggingFace/Ollama" spellcheck="false">
+      <button id="btnSearch" class="btn ghost">Tìm</button>
+      <button id="btnPreview" class="btn">Xem trước</button>
+    </div>
+    <p class="hint" style="margin:6px 0 0">Không nhớ tên chính xác? Gõ đại (vd <code>VoxCPM</code>) rồi bấm <b>Tìm</b>.</p>
+    <div id="results" class="results" hidden></div>
+
+    <label class="lbl" for="inc">Lọc file <span class="muted">(tuỳ chọn — rất nên dùng với repo GGUF)</span></label>
+    <input id="inc" placeholder='*.safetensors  *.json' spellcheck="false">
+
+    <div class="examples">
+      <b>Ví dụ theo nguồn</b>
+      <table>
+        <tr><td>Ollama</td><td><code>ollama:qwen3.5:9b</code></td></tr>
+        <tr><td>HuggingFace</td><td><code>hf:pnnbao-ump/VieNeu-TTS-v2</code></td></tr>
+        <tr><td>HF, 1 file GGUF</td><td><code>gguf:bartowski/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf</code></td></tr>
+        <tr><td>GitHub release</td><td><code>gh:owner/repo@v1.0/model.onnx</code></td></tr>
+        <tr><td>URL trực tiếp</td><td><code>url:https://…/model.bin</code></td></tr>
+        <tr><td>Có sẵn trong registry</td><td><code>whisper-medium-ct2</code></td></tr>
+      </table>
+    </div>
+
+    <div id="preview" class="preview" hidden></div>
+    <div id="progress" class="progress" hidden>
+      <div class="bar"><i id="barFill"></i></div>
+      <pre id="log"></pre>
+    </div>
+  </div>
+</main>
+
+<!-- ───────────────────────── SỨC KHOẺ ───────────────────────── -->
+<main id="view-health" class="view" hidden>
+  <div class="panel">
+    <div class="row between">
+      <h2>Kiểm tra sức khoẻ</h2>
+      <div>
+        <button id="btnServe" class="btn">Bật Ollama</button>
+        <button id="btnStop" class="btn ghost">Tắt</button>
+        <button id="btnDoctor" class="btn">Chạy lại</button>
+      </div>
+    </div>
+    <div id="doctor" class="doctor"><span class="skel">đang kiểm tra…</span></div>
+  </div>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

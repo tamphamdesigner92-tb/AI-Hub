@@ -1,0 +1,8 @@
+{
+  "name": "aihub",
+  "version": "1.0.0",
+  "description": "Client Node.js cho AI Hub — kho model AI local dùng chung",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {}
+}

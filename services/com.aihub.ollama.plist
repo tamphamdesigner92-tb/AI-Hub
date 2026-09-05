@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  TEMPLATE — KHÔNG cài mặc định.
+
+  AI Hub khuyến nghị chạy Ollama theo yêu cầu (`aihub serve`), không phải launchd agent:
+
+   1. Server thường trú có thể giữ tới ~10 GB trên máy 16 GB.
+   2. `ollama serve` prune blob vô chủ mỗi lần khởi động — bạn muốn kiểm soát thời điểm.
+   3. Ollama.app đã tự đăng ký login item com.ollama.ollama.plist. Thêm agent riêng
+      sẽ tranh cổng 11434.
+
+  Chỉ cài nếu bạn thực sự muốn Ollama luôn bật VÀ đã tắt login item của Ollama.app:
+      cp services/com.aihub.ollama.plist ~/Library/LaunchAgents/
+      launchctl load -w ~/Library/LaunchAgents/com.aihub.ollama.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.aihub.ollama</string>
+  <key>ProgramArguments</key>
+  <array><string>/usr/local/bin/ollama</string><string>serve</string></array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OLLAMA_MODELS</key><string>/Users/mac/.aihub/models/ollama</string>
+    <key>OLLAMA_MAX_LOADED_MODELS</key><string>1</string>
+    <key>OLLAMA_NUM_PARALLEL</key><string>1</string>
+    <key>OLLAMA_KEEP_ALIVE</key><string>5m</string>
+    <key>OLLAMA_MAX_QUEUED</key><string>8</string>
+    <key>OLLAMA_CONTEXT_LENGTH</key><string>8192</string>
+    <key>OLLAMA_FLASH_ATTENTION</key><string>1</string>
+    <key>OLLAMA_KV_CACHE_TYPE</key><string>q8_0</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/mac/.aihub/models/run/ollama.log</string>
+  <key>StandardErrorPath</key><string>/Users/mac/.aihub/models/run/ollama.log</string>
+</dict>
+</plist>

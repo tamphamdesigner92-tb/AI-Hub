@@ -1,0 +1,128 @@
+# ============================================
+# AI Hub — .gitignore
+# ============================================
+
+# --- Kho model (109GB) — KHÔNG BAO GIỜ commit ---
+# Đây là dữ liệu tải về, không phải mã nguồn.
+models/
+!models/.gitkeep
+
+# --- Log & runtime ---
+*.log
+*.pid
+*.sock
+run/
+logs/
+
+# --- Trạng thái máy cục bộ ---
+.migration-state.json
+
+# --- Bản backup / tạm ---
+*.bak
+*.bak-*
+*.backup
+*.orig
+*.rej
+*.tmp
+*~
+*.swp
+*.swo
+
+# --- Python ---
+.venv/
+venv/
+# (env/ ở dự án này là config, không phải virtualenv)
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.yarn/
+.pnp.*
+
+# --- Bí mật / thông tin nhạy cảm ---
+.env
+.env.*
+!.env.example
+*.local
+secrets.*
+*.pem
+*.key
+*.p12
+credentials.json
+token.json
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.DocumentRevisions-V100
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+Icon?
+
+# --- Editor / IDE ---
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.iml
+.claude/
+*.sublime-project
+*.sublime-workspace
+
+# --- File model nếu lỡ nằm ngoài models/ ---
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.mlmodel
+*.mlpackage/

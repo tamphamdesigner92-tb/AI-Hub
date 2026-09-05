@@ -1,0 +1,5 @@
+#!/bin/sh
+# AI Hub CLI. Chạy bằng venv riêng của hub để không phụ thuộc venv dự án.
+AIHUB_HOME="${AIHUB_HOME:-/Users/mac/.aihub}"
+exec "$AIHUB_HOME/.venv/bin/python" -c \
+  "import sys; sys.path.insert(0, '$AIHUB_HOME/clients/python/src'); from aihub.cli import main; sys.exit(main())" "$@"

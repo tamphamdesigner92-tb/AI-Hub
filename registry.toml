@@ -1,0 +1,526 @@
+# AI Hub — nguồn sự thật duy nhất về model
+# Sửa file này bằng tay hoặc để `aihub pull` tự thêm entry.
+# TUYỆT ĐỐI KHÔNG để API key / token ở đây.
+
+schema = 1
+
+[hub]
+root        = "/Users/mac/Documents/AI/AI Hub"   # nơi duy nhất có dấu cách
+home        = "/Users/mac/.aihub"
+store       = "/Users/mac/.aihub/models"
+default_llm = "qwen3.5"
+default_asr = "whisper-turbo-mlx"
+
+# ─────────────────────── Kho con & đường dẫn cũ được symlink về ───────────────────────
+[stores.ollama]
+path = "ollama"
+legacy = "/Users/mac/.ollama/models"
+env = "OLLAMA_MODELS"
+
+[stores.hf]
+path = "hf"
+legacy = "/Users/mac/.cache/huggingface"
+env = "HF_HOME"
+
+[stores.whisper]
+path = "whisper"
+legacy = "/Users/mac/.cache/whisper"
+env = "AIHUB_WHISPER_DIR"
+
+[stores.torch]
+path = "torch"
+legacy = "/Users/mac/.cache/torch"
+env = "TORCH_HOME"
+
+[stores.ct2]
+path = "ct2"
+legacy = ""
+env = "AIHUB_CT2_DIR"
+
+[stores.custom]
+path = "custom"
+legacy = ""
+env = "AIHUB_CUSTOM_DIR"
+
+# ─────────────────────── Endpoint ───────────────────────
+[endpoints.ollama]
+base    = "http://127.0.0.1:11434"
+openai  = "http://127.0.0.1:11434/v1"
+api_key = "ollama"          # placeholder, Ollama bỏ qua. Không phải secret thật.
+manage  = "aihub serve"
+
+# Cổng 4123 nay là server lồng tiếng của CrabbyCut, KHÔNG phải chatterbox.
+# Chatterbox đã bị bỏ: VoxCPM2-8bit lo được cả tiếng Anh lẫn tiếng Việt ở 48 kHz,
+# trong khi chatterbox-tts ghim torch==2.6.0 còn whisperx đòi torch~=2.8.0 —
+# không thể chung venv, mà thêm một venv nữa chỉ để làm việc VoxCPM2 đã làm.
+[endpoints.crabbycut-tts]
+base   = "http://127.0.0.1:4123"
+openai = "http://127.0.0.1:4123/v1"
+status = "installed"
+owners = ["Test 1 - Whisper"]
+serves = ["voxcpm2-8bit", "vieneu-tts"]
+manage = "npm run tts:serve"
+note   = "Giao thức OpenAI /v1/audio/speech. Giọng: voxcpm:<mô tả> hoặc vieneu:<preset>. Tự nhả model sau 5 phút rảnh."
+
+# ═══════════════════════ LLM / VLM — chế độ endpoint ═══════════════════════
+
+[models.qwen3-5]
+title       = "Qwen 3.5 9B"
+runtime     = "ollama"
+ref         = "qwen3.5:9b"
+store       = "ollama"
+access      = ["endpoint"]
+task        = "chat"
+size_gb     = 6.59
+quant       = "Q4_K_M"
+ram_gb      = 8.0
+tags        = ["đa năng", "tiếng Việt tốt", "mặc định"]
+desc        = "LLM tổng quát. Cân bằng tốt nhất giữa chất lượng và RAM trên máy 16 GB — chạy xong còn dư ~4 GB cho việc khác."
+strengths   = ["viết & tóm tắt", "hỏi đáp", "trích xuất dữ liệu có cấu trúc"]
+owners      = []
+recommended = true
+
+[models.gemma4-e4b]
+title   = "Gemma 4 E4B"
+runtime = "ollama"
+ref     = "gemma4:e4b"
+store   = "ollama"
+access  = ["endpoint"]
+task    = "chat"
+size_gb = 9.61
+quant   = "Q4_K_M"
+ram_gb  = 11.5
+tags    = ["lớn nhất", "cẩn trọng RAM"]
+desc    = "Model local lớn nhất trong kho. Chất lượng cao nhưng sẽ tràn sang CPU khi context dài trên máy 16 GB."
+strengths = ["viết dài", "suy luận nhiều bước"]
+owners  = ["Editing-Video-Pipeline-4.0-gemma"]
+
+[models.qwen2-5-14b]
+title   = "Qwen 2.5 14B"
+runtime = "ollama"
+ref     = "qwen2.5:14b"
+store   = "ollama"
+access  = ["endpoint"]
+task    = "chat"
+size_gb = 8.99
+quant   = "Q4_K_M"
+ram_gb  = 11.0
+tags    = ["suy luận mạnh", "chậm"]
+desc    = "Nhiều tham số nhất ở nhánh text. Chính xác hơn Qwen 3.5 ở bài toán khó, đổi lại chậm và ngốn RAM."
+strengths = ["toán & logic", "dịch thuật"]
+owners  = []
+
+[models.deepseek-coder-v2-lite]
+title   = "DeepSeek Coder V2 Lite"
+runtime = "ollama"
+ref     = "DeepSeek-Coder-V2:lite"
+store   = "ollama"
+access  = ["endpoint"]
+task    = "code"
+size_gb = 8.91
+quant   = "Q4_K_M"
+ram_gb  = 10.5
+tags    = ["lập trình", "sinh code"]
+desc    = "Chuyên cho code. Hiểu ngữ cảnh repo tốt hơn model tổng quát cùng cỡ."
+strengths = ["sinh code", "giải thích code", "sửa lỗi"]
+owners  = []
+
+[models.qwen3-vl]
+title       = "Qwen 3 VL 8B"
+runtime     = "ollama"
+ref         = "qwen3-vl:8b"
+store       = "ollama"
+access      = ["endpoint"]
+task        = "vision"
+size_gb     = 6.14
+quant       = "Q4_K_M"
+ram_gb      = 7.5
+tags        = ["đọc ảnh", "OCR", "mô tả ảnh"]
+desc        = "Model thị giác nên dùng. Đọc chữ trong ảnh, mô tả khung hình, trả lời câu hỏi về ảnh."
+strengths   = ["OCR", "mô tả khung hình video", "đọc biểu đồ"]
+owners      = []
+recommended = true
+
+[models.qwen2-5-vl]
+title             = "Qwen 2.5 VL 7B"
+runtime           = "ollama"
+ref               = "qwen2.5vl:7b"
+store             = "ollama"
+access            = ["endpoint"]
+task              = "vision"
+size_gb           = 5.97
+quant             = "Q4_K_M"
+ram_gb            = 7.5
+tags              = ["đọc ảnh", "bản cũ", "có thể dọn"]
+desc              = "Thế hệ trước của Qwen 3 VL. Bị thay thế hoàn toàn — xoá thu hồi 6.0 GB."
+owners            = []
+archive_candidate = true
+
+[models.flux2-klein]
+title   = "FLUX.2 Klein 9B"
+runtime = "ollama"
+ref     = "x/flux2-klein:9b"
+store   = "ollama"
+access  = ["endpoint"]
+task    = "image"
+size_gb = 11.97
+ram_gb  = 13.0
+tags    = ["sinh ảnh", "nặng RAM"]
+desc    = "Sinh ảnh từ văn bản. Cần ~13 GB RAM — gần chạm trần máy 16 GB, đừng chạy song song thứ gì khác."
+strengths = ["text-to-image"]
+owners  = []
+
+[models.flux2-klein-latest]
+title             = "FLUX.2 Klein (bản latest)"
+runtime           = "ollama"
+ref               = "x/flux2-klein:latest"
+store             = "ollama"
+access            = ["endpoint"]
+task              = "image"
+size_gb           = 5.73
+ram_gb            = 7.0
+tags              = ["sinh ảnh", "bản cũ", "có thể dọn"]
+desc              = "Bản build cũ của cùng model. Đã đo: chỉ chung 0.18 GB blob với :9b → xoá thu hồi thật 5.54 GB."
+owners            = []
+archive_candidate = true
+
+[models.deepseek-v3-1-cloud]
+title   = "DeepSeek V3.1 671B (cloud)"
+runtime = "ollama"
+ref     = "deepseek-v3.1:671b-cloud"
+store   = "ollama"
+access  = ["endpoint"]
+task    = "chat"
+size_gb = 0.0
+ram_gb  = 0.0
+local   = false
+tags    = ["cloud", "không chiếm đĩa"]
+desc    = "CHỈ CÓ MANIFEST — trọng số chạy trên cloud của Ollama, 0 byte lưu local. Đừng 'sửa' khi doctor báo thiếu blob."
+owners  = []
+
+# ═══════════════════════ ASR / TTS — chế độ path ═══════════════════════
+
+[models.whisper-turbo-mlx]
+title       = "Whisper Large v3 Turbo (MLX)"
+runtime     = "mlx"
+store       = "hf"
+access      = ["path"]
+task        = "asr"
+size_gb     = 1.5
+ram_gb      = 2.0
+tags        = ["nhanh nhất", "tối ưu Apple Silicon", "mặc định"]
+desc        = "Chạy trên GPU Metal qua MLX. Nhanh nhất trên M1 Pro — đây là đường nhận dạng giọng nói nên dùng."
+strengths   = ["chuyển giọng nói thành chữ", "đa ngôn ngữ", "có timestamp"]
+owners      = ["Test 1 - Whisper", "Editing-Video-Pipeline-4.0-gemma"]
+recommended = true
+[models.whisper-turbo-mlx.source]
+kind = "hf"
+repo = "mlx-community/whisper-large-v3-turbo"
+[models.whisper-turbo-mlx.expose]
+link = "whisper-large-v3-turbo-mlx"
+
+[models.whisper-large-v3-ct2]
+title   = "Whisper Large v3 (CTranslate2)"
+runtime = "faster-whisper"
+store   = "hf"
+access  = ["path"]
+task    = "asr"
+size_gb = 2.9
+ram_gb  = 3.5
+quant   = "float16"
+aliases = ["large-v3", "whisper-large-v3"]
+tags    = ["chính xác cao", "chạy CPU"]
+desc    = "Bản CTranslate2 cho faster-whisper. Chính xác hơn turbo một chút, chạy được trên CPU với int8."
+strengths = ["phụ đề chính xác", "chạy nền CPU"]
+owners  = ["MoneyPrinterTurbo"]
+[models.whisper-large-v3-ct2.source]
+kind = "hf"
+repo = "Systran/faster-whisper-large-v3"
+[models.whisper-large-v3-ct2.expose]
+ct2          = "large-v3"
+link         = "faster-whisper-large-v3"
+project_link = "/Users/mac/Documents/AI/MoneyPrinterTurbo/models/whisper-large-v3"
+
+[models.whisper-medium-ct2]
+title             = "Whisper Medium (CTranslate2)"
+runtime           = "faster-whisper"
+store             = "hf"
+access            = ["path"]
+task              = "asr"
+size_gb           = 1.4
+ram_gb            = 1.8
+aliases           = ["medium"]
+tags              = ["bản cũ", "có thể dọn"]
+desc              = "Bị thay thế bởi large-v3. Không dự án nào tham chiếu."
+owners            = []
+archive_candidate = true
+[models.whisper-medium-ct2.source]
+kind = "hf"
+repo = "Systran/faster-whisper-medium"
+
+[models.whisper-large-v3-mlx]
+title             = "Whisper Large v3 (MLX, bản đầy đủ)"
+runtime           = "mlx"
+store             = "hf"
+access            = ["path"]
+task              = "asr"
+size_gb           = 2.9
+ram_gb            = 3.5
+tags              = ["bản cũ", "có thể dọn"]
+desc              = "Bị thay thế bởi bản -turbo mà code thực sự dùng. Xoá thu hồi 2.9 GB."
+owners            = []
+archive_candidate = true
+[models.whisper-large-v3-mlx.source]
+kind = "hf"
+repo = "mlx-community/whisper-large-v3-mlx"
+
+[models.whisper-large-v3-pt]
+title             = "Whisper Large v3 (PyTorch)"
+runtime           = "openai-whisper"
+store             = "whisper"
+access            = ["path"]
+task              = "asr"
+file              = "large-v3.pt"
+size_gb           = 2.9
+ram_gb            = 6.0
+tags              = ["bản gốc OpenAI", "nhánh dự phòng"]
+desc              = "Chỉ chạm tới ở nhánh device != 'mac_silicon' — thực tế không bao giờ chạy trên máy này. Giữ làm dự phòng."
+owners            = ["Test 1 - Whisper"]
+
+[models.whisper-medium-pt]
+title             = "Whisper Medium (PyTorch)"
+runtime           = "openai-whisper"
+store             = "whisper"
+access            = ["path"]
+task              = "asr"
+file              = "medium.pt"
+size_gb           = 1.4
+ram_gb            = 3.0
+tags              = ["bản cũ", "có thể dọn"]
+desc              = "Bị thay thế bởi large-v3.pt. Xoá thu hồi 1.4 GB."
+owners            = []
+archive_candidate = true
+
+[models.vieneu-tts]
+title   = "VieNeu TTS v2"
+runtime = "hf-transformers"
+store   = "hf"
+access  = ["path"]
+task    = "tts"
+size_gb = 0.18
+ram_gb  = 1.0
+tags    = ["tiếng Việt", "giọng nói", "chưa dùng"]
+desc    = "Tổng hợp giọng nói tiếng Việt, 7 giọng dựng sẵn (Binh · Tuyen · Vinh · Doan · Ly · Sơn · Ngoc). CrabbyCut dùng cho lồng tiếng Việt vì tự nhiên hơn VoxCPM2."
+strengths = ["đọc văn bản tiếng Việt"]
+owners  = ["Test 1 - Whisper"]
+[models.vieneu-tts.source]
+kind = "hf"
+repo = "pnnbao-ump/VieNeu-TTS-v2"
+
+[models.neucodec-onnx]
+title   = "NeuCodec ONNX decoder (int8)"
+runtime = "onnx"
+store   = "hf"
+access  = ["path"]
+task    = "tts"
+size_gb = 0.30
+ram_gb  = 0.5
+tags    = ["vocoder", "đi kèm VieNeu-TTS", "chưa dùng"]
+desc    = "Bộ giải mã âm thanh đi kèm VieNeu-TTS (nhánh legacy). Giữ lại vì CrabbyCut có thể cần nếu vieneu chạy đường transformers thay vì ONNX."
+owners  = ["Test 1 - Whisper"]
+[models.neucodec-onnx.source]
+kind = "hf"
+repo = "neuphonic/neucodec-onnx-decoder-int8"
+
+[models.wav2vec2-vi]
+title   = "wav2vec2 base Vietnamese (VLSP2020)"
+runtime = "hf-transformers"
+store   = "hf"
+access  = ["path"]
+task    = "asr"
+size_gb = 0.73
+ram_gb  = 1.5
+tags    = ["tiếng Việt", "nhẹ", "chưa dùng"]
+desc    = "ASR tiếng Việt chuyên biệt, nhẹ hơn Whisper nhiều. Chưa dự án nào tham chiếu."
+strengths = ["nhận dạng tiếng Việt", "chạy nhanh trên CPU"]
+owners  = []
+[models.wav2vec2-vi.source]
+kind = "hf"
+repo = "nguyenvulebinh/wav2vec2-base-vi-vlsp2020"
+
+
+[models.voxcpm2]
+title = "VoxCPM2"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "tts"
+size_gb = 4.96
+ram_gb = 6.8
+tags = ["text-to-speech", "tts", "multilingual", "voice-cloning", "voxcpm", "voice-design"]
+desc = "Tổng hợp giọng nói đa ngôn ngữ (30 thứ tiếng, có tiếng Việt), hỗ trợ nhân bản giọng từ mẫu ngắn."
+strengths = ["đọc văn bản thành giọng nói", "nhân bản giọng", "thiết kế giọng theo mô tả"]
+owners = []
+[models.voxcpm2.source]
+kind = "hf"
+repo = "openbmb/VoxCPM2"
+
+[models.voxcpm2-8bit]
+title = "VoxCPM2-8bit"
+runtime = "mlx"
+store = "hf"
+access = ["path"]
+task = "tts"
+size_gb = 3.23
+ram_gb = 4.1
+tags = ["mlx", "tts", "text-to-speech", "voice-cloning", "mlx-audio", "voxcpm2"]
+desc = "Tổng hợp giọng nói đa ngôn ngữ (30 thứ tiếng, có tiếng Việt), 48 kHz, nhân bản giọng từ mẫu ngắn. Bản MLX chạy GPU Metal — đây là engine lồng tiếng mặc định của CrabbyCut."
+strengths = ["đọc văn bản thành giọng nói", "nhân bản giọng", "thiết kế giọng theo mô tả"]
+owners = ["Test 1 - Whisper"]
+[models.voxcpm2-8bit.source]
+kind = "hf"
+repo = "mlx-community/VoxCPM2-8bit"
+
+[models.animatediff-lightning]
+title = "AnimateDiff-Lightning"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "video"
+size_gb = 7.28
+ram_gb = 9.9
+tags = ["text-to-video", "stable-diffusion", "animatediff", "diffusers"]
+desc = "Sinh video từ chữ, đã chưng cất còn 1-8 bước nên nhanh hơn LTX nhiều. CHỈ LÀ MOTION ADAPTER — bắt buộc đi kèm một model nền SD 1.5 (CrabbyCut dùng epiCRealism) và scheduler Euler timestep_spacing=trailing, guidance_scale=1.0."
+strengths = ["sinh video nhanh", "điều khiển máy quay bằng LoRA"]
+owners = ["Test 1 - Whisper"]
+[models.animatediff-lightning.source]
+kind = "hf"
+repo = "ByteDance/AnimateDiff-Lightning"
+
+[models.ltx-video-0-9-5]
+title = "LTX-Video-0.9.5"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "video"
+size_gb = 25.65
+ram_gb = 9.5
+tags = ["ltx-video", "image-to-video", "diffusers", "text-to-video", "en"]
+desc = "Sinh video từ chữ (DiT 2B). CẢNH BÁO: text_encoder T5-XXL trên đĩa là fp32 nặng 18 GB — không nạp thẳng được trên máy 16 GB. CrabbyCut chạy 3 pha: mã hoá prompt bằng bản T5 bf16 (~9.5 GB) → giải phóng → nạp transformer+VAE (5.9 GB) rồi mới sinh."
+strengths = ["sinh video từ chữ", "sinh video từ ảnh", "chất lượng cao"]
+owners = ["Test 1 - Whisper"]
+[models.ltx-video-0-9-5.source]
+kind = "hf"
+repo = "Lightricks/LTX-Video-0.9.5"
+
+[models.animatediff-motion-lora-pan-left]
+title = "animatediff-motion-lora-pan-left"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "video"
+size_gb = 0.08
+ram_gb = 0.5
+tags = ["animatediff", "diffusers", "text-to-video"]
+desc = "LoRA điều khiển máy quay cho AnimateDiff: lia máy sang trái. Gắn kèm motion adapter, cường độ chỉnh được (mặc định 0.8)."
+strengths = ["điều khiển chuyển động máy quay"]
+owners = ["Test 1 - Whisper"]
+[models.animatediff-motion-lora-pan-left.source]
+kind = "hf"
+repo = "guoyww/animatediff-motion-lora-pan-left"
+
+[models.animatediff-motion-lora-pan-right]
+title = "animatediff-motion-lora-pan-right"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "video"
+size_gb = 0.08
+ram_gb = 0.5
+tags = ["animatediff", "diffusers", "text-to-video"]
+desc = "LoRA điều khiển máy quay cho AnimateDiff: lia máy sang phải. Gắn kèm motion adapter, cường độ chỉnh được (mặc định 0.8)."
+strengths = ["điều khiển chuyển động máy quay"]
+owners = ["Test 1 - Whisper"]
+[models.animatediff-motion-lora-pan-right.source]
+kind = "hf"
+repo = "guoyww/animatediff-motion-lora-pan-right"
+
+[models.animatediff-motion-lora-tilt-down]
+title = "animatediff-motion-lora-tilt-down"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "video"
+size_gb = 0.08
+ram_gb = 0.5
+tags = ["animatediff", "diffusers", "text-to-video"]
+desc = "LoRA điều khiển máy quay cho AnimateDiff: chúc máy xuống. Gắn kèm motion adapter, cường độ chỉnh được (mặc định 0.8)."
+strengths = ["điều khiển chuyển động máy quay"]
+owners = ["Test 1 - Whisper"]
+[models.animatediff-motion-lora-tilt-down.source]
+kind = "hf"
+repo = "guoyww/animatediff-motion-lora-tilt-down"
+
+[models.animatediff-motion-lora-tilt-up]
+title = "animatediff-motion-lora-tilt-up"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "video"
+size_gb = 0.08
+ram_gb = 0.5
+tags = ["animatediff", "diffusers", "text-to-video"]
+desc = "LoRA điều khiển máy quay cho AnimateDiff: hất máy lên. Gắn kèm motion adapter, cường độ chỉnh được (mặc định 0.8)."
+strengths = ["điều khiển chuyển động máy quay"]
+owners = ["Test 1 - Whisper"]
+[models.animatediff-motion-lora-tilt-up.source]
+kind = "hf"
+repo = "guoyww/animatediff-motion-lora-tilt-up"
+
+[models.animatediff-motion-lora-zoom-in]
+title = "animatediff-motion-lora-zoom-in"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "video"
+size_gb = 0.08
+ram_gb = 0.5
+tags = ["animatediff", "diffusers", "text-to-video"]
+desc = "LoRA điều khiển máy quay cho AnimateDiff: đẩy máy vào gần. Gắn kèm motion adapter, cường độ chỉnh được (mặc định 0.8)."
+strengths = ["điều khiển chuyển động máy quay"]
+owners = ["Test 1 - Whisper"]
+[models.animatediff-motion-lora-zoom-in.source]
+kind = "hf"
+repo = "guoyww/animatediff-motion-lora-zoom-in"
+
+[models.animatediff-motion-lora-zoom-out]
+title = "animatediff-motion-lora-zoom-out"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "video"
+size_gb = 0.08
+ram_gb = 0.5
+tags = ["animatediff", "diffusers", "text-to-video"]
+desc = "LoRA điều khiển máy quay cho AnimateDiff: kéo máy ra xa. Gắn kèm motion adapter, cường độ chỉnh được (mặc định 0.8)."
+strengths = ["điều khiển chuyển động máy quay"]
+owners = ["Test 1 - Whisper"]
+[models.animatediff-motion-lora-zoom-out.source]
+kind = "hf"
+repo = "guoyww/animatediff-motion-lora-zoom-out"
+
+[models.epicrealism]
+title = "epiCRealism"
+runtime = "hf-transformers"
+store = "hf"
+access = ["path"]
+task = "image"
+size_gb = 4.27
+ram_gb = 6.0
+tags = ["stable-diffusion", "stable-diffusion-diffusers", "text-to-image", "diffusers", "en", "endpoints_compatible"]
+desc = "Model nền Stable Diffusion 1.5 (ảnh thực). CrabbyCut KHÔNG dùng để sinh ảnh — đây là NỀN BẮT BUỘC của animatediff-lightning (motion adapter không tự chạy được). Đã lược bỏ bản .bin trùng và safety_checker khi tải: 11 GB → 4 GB."
+strengths = ["nền cho AnimateDiff", "ảnh người thực"]
+owners = ["Test 1 - Whisper"]
+[models.epicrealism.source]
+kind = "hf"
+repo = "emilianJR/epiCRealism"

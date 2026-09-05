@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aihub"
+version = "1.0.0"
+description = "Client cho AI Hub — kho model AI local dùng chung"
+requires-python = ">=3.11"
+dependencies = []            # tomllib có sẵn trong stdlib từ 3.11
+
+[project.optional-dependencies]
+fetch = ["huggingface_hub>=0.30"]
+
+[project.scripts]
+aihub = "aihub.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
