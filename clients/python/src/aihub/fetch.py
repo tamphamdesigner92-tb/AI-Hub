@@ -19,6 +19,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from . import plat
 from .resolve import HUB_HOME, load_registry, store_dir, store_root
 
 MIN_FREE_GB = 20.0
@@ -29,8 +30,7 @@ class PullError(RuntimeError):
 
 
 def free_gb() -> float:
-    st = os.statvfs(store_root())
-    return st.f_bavail * st.f_frsize / 1e9
+    return plat.free_bytes(store_root()) / 1e9
 
 
 def _check_space(need_gb: float) -> None:
@@ -48,9 +48,11 @@ def _hf_api():
     try:
         from huggingface_hub import HfApi
     except ImportError:
+        pip = plat.venv_python(HUB_HOME / ".venv").with_name(
+            "pip.exe" if plat.WINDOWS else "pip")
         raise PullError(
-            "Thiếu huggingface_hub. Cài: "
-            f"{HUB_HOME}/.venv/bin/pip install huggingface_hub"
+            "Thiếu huggingface_hub. Cài:\n"
+            f'    "{pip}" install huggingface_hub'
         )
     return HfApi()
 
@@ -259,9 +261,19 @@ def parse_source(spec: str) -> tuple[str, str]:
     return scheme, rest
 
 
+def preferred_format() -> str:
+    """Định dạng chạy nhanh nhất trên máy này.
+
+    MLX chỉ chạy trên Apple Silicon; ngoài macOS nó là file chết. Ở nơi khác thì
+    GGUF là thứ Ollama/llama.cpp nạp được, kể cả khi có GPU NVIDIA.
+    """
+    return "mlx" if sys.platform == "darwin" else "gguf"
+
+
 def search(query: str, limit: int = 12) -> list[dict]:
     """Tìm trọng số model trên HuggingFace theo tên."""
     api = _hf_api()
+    pref = preferred_format()
     out = []
     for m in api.list_models(search=query, limit=limit, sort="downloads"):
         try:
@@ -276,6 +288,7 @@ def search(query: str, limit: int = 12) -> list[dict]:
             "downloads": getattr(m, "downloads", 0) or 0,
             "mlx": "mlx" in mid,          # tối ưu Apple Silicon
             "gguf": "gguf" in mid,
+            "preferred": pref in mid,     # định dạng hợp với máy đang chạy
             "spec": f"hf:{m.id}",
         })
     return out
@@ -302,7 +315,9 @@ def pull(spec: str, include=None, exclude=None, dry_run=False, sha256=None):
         return url_pull(rest, sha256=sha256, dry_run=dry_run)
     if scheme == "git":
         if not shutil.which("git-lfs"):
-            raise PullError("Cần git-lfs. Cài: brew install git-lfs && git lfs install")
+            how = ("winget install GitHub.GitLFS" if plat.WINDOWS
+                   else "brew install git-lfs")
+            raise PullError(f"Cần git-lfs. Cài: {how} && git lfs install")
         dest = store_dir("custom") / rest.rstrip("/").split("/")[-1].replace(".git", "")
         if dry_run:
             return {"repo": rest, "files": [], "count": 0, "total_gb": 0.0}
@@ -362,7 +377,7 @@ def append_registry(name: str, **fields) -> bool:
         lines.append(f"[models.{name}.{section}]")
         for k, v in body.items():
             lines.append(f"{k} = {_toml_str(v)}")
-    with reg_path.open("a") as fh:
+    with reg_path.open("a", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
     load_registry(refresh=True)
     return True

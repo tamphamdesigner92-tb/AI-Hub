@@ -9,15 +9,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import plat
 from . import resolve as R
 from .resolve import HUB_HOME, get, list_models, load_registry, store_dir, store_root
 
 G, Y, RD, C, B, X = "\033[32m", "\033[33m", "\033[31m", "\033[36m", "\033[1m", "\033[0m"
-if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+if not plat.init_console():
     G = Y = RD = C = B = X = ""
 
 BADGE = {"present": f"{G}●{X} có sẵn", "missing": f"{Y}○{X} chưa tải",
-         "cloud": f"{C}☁{X} cloud", "partial": f"{Y}◐{X} thiếu file"}
+         "cloud": f"{C}☁{X} cloud", "partial": f"{Y}◐{X} thiếu file",
+         "unsupported": f"{RD}⊘{X} khác nền tảng"}
 
 
 def die(msg: str, code: int = 1):
@@ -171,13 +173,18 @@ def cmd_search(a):
         print(json.dumps(rows, ensure_ascii=False, indent=2)); return
     if not rows:
         print(f"Không tìm thấy gì cho '{' '.join(a.query)}'."); return
-    print(f"\n{B}Kết quả trên HuggingFace{X}   (★ = tối ưu Apple Silicon)\n")
+    from .fetch import preferred_format
+    pref = preferred_format()
+    print(f"\n{B}Kết quả trên HuggingFace{X}   (★ = hợp với máy này)\n")
     for r in rows:
-        mark = f"{G}★{X}" if r["mlx"] else (f"{C}◆{X}" if r["gguf"] else " ")
+        mark = f"{G}★{X}" if r.get("preferred") else (f"{C}◆{X}" if r["gguf"] or r["mlx"] else " ")
         sz = f'{r["gb"]:.2f} GB' if r["gb"] else "   ?   "
         print(f" {mark} {r['id']:<44} {sz:>9}  ⬇{r['downloads']:,}")
     print(f"\nTải:  aihub pull hf:<id>            Xem trước:  … --dry-run")
-    print(f"★ MLX chạy nhanh nhất trên M1 Pro · ◆ GGUF dùng được với Ollama\n")
+    if pref == "gguf":
+        print(f"★ GGUF nạp được bằng Ollama · MLX chỉ chạy trên Apple Silicon\n")
+    else:
+        print(f"★ MLX chạy nhanh nhất trên Apple Silicon · ◆ GGUF dùng với Ollama\n")
 
 
 def cmd_adopt(a):
@@ -199,12 +206,25 @@ def cmd_adopt(a):
 
 
 def cmd_env(a):
+    """In biến môi trường của hub, dán thẳng vào shell được.
+
+    Mặc định theo shell của hệ điều hành đang chạy: in `export FOO=bar` trên
+    Windows là vô dụng, mà đây chính là lệnh người ta hay copy-paste nhất.
+    """
     e = R.env_dict()
     if a.json:
-        print(json.dumps(e))
-    else:
-        for k, v in e.items():
-            print(f"export {k}={v}")
+        print(json.dumps(e)); return
+
+    fmt = a.format
+    if not fmt:
+        fmt = "ps" if plat.WINDOWS else "sh"
+    for k, v in e.items():
+        if fmt == "ps":
+            print(f'$env:{k} = "{v}"')
+        elif fmt == "cmd":
+            print(f"set {k}={v}")
+        else:
+            print(f'export {k}="{v}"')
 
 
 def cmd_serve(a):
@@ -215,32 +235,30 @@ def cmd_serve(a):
         print(f"{G}✓{X} Ollama đã chạy ở {base}"); return
     except Exception:
         pass
-    ollama = shutil.which("ollama") or "/usr/local/bin/ollama"
-    if not Path(ollama).exists():
-        die("không tìm thấy lệnh ollama")
+    ollama = plat.ollama_bin()
+    if not ollama:
+        die("không tìm thấy lệnh ollama — cài từ https://ollama.com/download")
     env = {**os.environ, **R.env_dict()}
     log = store_root() / "run" / "ollama.log"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a") as fh:
-        p = subprocess.Popen([ollama, "serve"], env=env, stdout=fh, stderr=fh,
-                             start_new_session=True)
-    (store_root() / "run" / "ollama.pid").write_text(str(p.pid))
+    p = plat.spawn_detached([ollama, "serve"], env, log)
+    (store_root() / "run" / "ollama.pid").write_text(str(p.pid), encoding="utf-8")
     print(f"{G}✓{X} đã bật Ollama (pid {p.pid}) · log: {log}")
     print(f"   OLLAMA_MODELS={env.get('OLLAMA_MODELS')}")
 
 
 def cmd_stop(a):
     pidf = store_root() / "run" / "ollama.pid"
+    pid = None
     if pidf.exists():
         try:
-            os.kill(int(pidf.read_text()), 15)
-            print(f"{G}✓{X} đã tắt Ollama")
-        except ProcessLookupError:
-            print("Ollama không còn chạy")
-        pidf.unlink(missing_ok=True)
-    else:
-        subprocess.run(["pkill", "-x", "ollama"])
-        print("đã gửi tín hiệu tắt")
+            pid = int(pidf.read_text(encoding="utf-8").strip())
+        except ValueError:
+            pass
+    ok = plat.kill_ollama(pid)
+    pidf.unlink(missing_ok=True)
+    # Trên Windows, app Ollama chạy nền ngoài `ollama serve` cũng giữ cổng 11434;
+    # taskkill /T trong plat.kill_ollama đã bao gồm nó.
+    print(f"{G}✓{X} đã tắt Ollama" if ok else "Ollama không còn chạy")
 
 
 def cmd_ps(a):
@@ -277,17 +295,14 @@ def cmd_du(a):
     store = store_root()
     print(f"\n{B}Dung lượng kho{X}  {store}\n")
     tot = 0
-    for sub in sorted(p for p in store.iterdir() if p.is_dir()):
-        out = subprocess.run(["du", "-sk", str(sub)], capture_output=True, text=True)
-        kb = int(out.stdout.split()[0]) if out.stdout.strip() else 0
-        gb = kb / 1e6
+    for d in sorted(p for p in store.iterdir() if p.is_dir()):
+        gb = plat.dir_size_bytes(d) / 1e9
         tot += gb
         if gb >= 0.01:
-            print(f"  {sub.name:<12} {gb:>8.2f} GB")
+            print(f"  {d.name:<12} {gb:>8.2f} GB")
     print(f"  {'—'*12} {'—'*11}")
     print(f"  {'tổng':<12} {tot:>8.2f} GB")
-    st = os.statvfs(store)
-    print(f"\n  đĩa trống    {st.f_bavail*st.f_frsize/1e9:>8.0f} GB")
+    print(f"\n  đĩa trống    {plat.free_bytes(store)/1e9:>8.0f} GB")
     # chỉ tính model CÒN TRÊN ĐĨA — model đã xoá vẫn nằm trong registry ở
     # trạng thái "chưa tải" để tải lại được, nhưng không chiếm chỗ nữa.
     rec = [m for m in list_models(with_disk=True) if m.archive_candidate and m.status == "present"]
@@ -324,8 +339,8 @@ def cmd_gc(a):
         print("đã huỷ"); return
     for m in rec:
         if m.runtime == "ollama":
-            subprocess.run([shutil.which("ollama") or "/usr/local/bin/ollama",
-                            "rm", m.ref], env={**os.environ, **R.env_dict()})
+            subprocess.run([plat.ollama_bin() or "ollama", "rm", m.ref],
+                           env={**os.environ, **R.env_dict()})
         elif m.path:
             p = Path(m.path)
             target = p if m.store == "whisper" else p.parents[1]  # repo dir của HF
@@ -333,40 +348,48 @@ def cmd_gc(a):
         print(f"{G}✓{X} đã xoá {m.name}")
 
 
+def _make_link(src: str, dst: Path) -> str:
+    """Liên kết dst → src, chọn loại phù hợp với hệ điều hành và với đích."""
+    return (plat.link_dir(src, dst) if Path(src).is_dir()
+            else plat.link_file(src, dst))
+
+
 def cmd_link(a):
-    """Tạo symlink tên ổn định trong models/links/ và symlink cho dự án."""
+    """Tạo liên kết tên ổn định trong models/links/ và liên kết cho dự án.
+
+    Trên Windows không bật Developer Mode thì symlink bị từ chối; plat tự tụt
+    xuống junction (thư mục) hoặc hardlink (file). Cả hai đều trong suốt với
+    công cụ đọc model, nên phía dùng không cần biết khác biệt.
+    """
     links = store_dir("links"); links.mkdir(parents=True, exist_ok=True)
     n = 0
     for m in list_models(status="present"):
         exp = m.expose or {}
-        if exp.get("link") and m.path:
-            dst = links / exp["link"]
-            if dst.is_symlink():
-                dst.unlink()
-            dst.symlink_to(m.path)
-            print(f"{G}✓{X} links/{exp['link']} → {m.path}"); n += 1
-        if exp.get("ct2") and m.path:
+        if not m.path:
+            continue
+        targets = []
+        if exp.get("link"):
+            targets.append((links / exp["link"], f"links/{exp['link']}"))
+        if exp.get("ct2"):
             ct2 = store_dir("ct2"); ct2.mkdir(parents=True, exist_ok=True)
-            dst = ct2 / exp["ct2"]
-            if dst.is_symlink():
-                dst.unlink()
-            dst.symlink_to(m.path)
-            print(f"{G}✓{X} ct2/{exp['ct2']} → {m.path}"); n += 1
-        if a.projects and exp.get("project_link") and m.path:
-            dst = Path(exp["project_link"])
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            if dst.is_symlink():
-                dst.unlink()
-            elif dst.exists():
-                print(f"{Y}!{X} bỏ qua {dst} (đã tồn tại, không phải symlink)"); continue
-            dst.symlink_to(m.path)
-            print(f"{G}✓{X} {dst} → {m.path}"); n += 1
-    print(f"\n{n} symlink.")
+            targets.append((ct2 / exp["ct2"], f"ct2/{exp['ct2']}"))
+        if a.projects and exp.get("project_link"):
+            targets.append((Path(exp["project_link"]), exp["project_link"]))
+
+        for dst, label in targets:
+            if dst.exists() and not plat.is_link(dst):
+                print(f"{Y}!{X} bỏ qua {label} (đã tồn tại, không phải liên kết)")
+                continue
+            try:
+                kind = _make_link(m.path, dst)
+            except OSError as e:
+                print(f"{RD}✗{X} {label}: {e}"); continue
+            print(f"{G}✓{X} {label} → {m.path}  ({kind})"); n += 1
+    print(f"\n{n} liên kết.")
 
 
 def cmd_install(a):
-    venv = Path(a.python).expanduser()
-    py = venv if venv.name.startswith("python") else venv / "bin" / "python"
+    py = plat.venv_python(Path(a.python))
     if not py.exists():
         die(f"không thấy interpreter: {py}")
     pkg = HUB_HOME / "clients" / "python"
@@ -386,12 +409,26 @@ def cmd_web(a):
     websrv.serve(a.port, open_browser=not a.no_open)
 
 
+def _run_script(stem: str):
+    """Chạy script migrate/rollback bằng shell của hệ điều hành."""
+    if plat.WINDOWS:
+        script = HUB_HOME / "scripts" / f"{stem}.ps1"
+        cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+               "-File", str(script)]
+    else:
+        script = HUB_HOME / "scripts" / f"{stem}.sh"
+        cmd = ["/bin/zsh", str(script)]
+    if not script.is_file():
+        die(f"không thấy {script}")
+    subprocess.run(cmd, check=False)
+
+
 def cmd_migrate(a):
-    subprocess.run(["/bin/zsh", str(HUB_HOME / "scripts" / "migrate.sh")], check=False)
+    _run_script("migrate")
 
 
 def cmd_rollback(a):
-    subprocess.run(["/bin/zsh", str(HUB_HOME / "scripts" / "rollback.sh")], check=False)
+    _run_script("rollback")
 
 
 # ───────────────────────────── parser ─────────────────────────────
@@ -412,7 +449,8 @@ def main(argv=None):
 
     s = add("list", cmd_list, "liệt kê model")
     s.add_argument("--task"); s.add_argument("--runtime")
-    s.add_argument("--status", choices=["present", "missing", "cloud"])
+    s.add_argument("--status",
+                   choices=["present", "missing", "cloud", "unsupported"])
     s.add_argument("--json", action="store_true")
 
     s = add("info", cmd_info, "chi tiết một model")
@@ -430,7 +468,15 @@ def main(argv=None):
     s.add_argument("query", nargs="+"); s.add_argument("--limit", type=int, default=12)
     s.add_argument("--json", action="store_true")
 
-    s = add("env", cmd_env, "in biến môi trường của hub"); s.add_argument("--json", action="store_true")
+    s = add("env", cmd_env, "in biến môi trường của hub")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--sh", dest="format", action="store_const", const="sh",
+                   help="cú pháp POSIX (export FOO=bar)")
+    s.add_argument("--ps", dest="format", action="store_const", const="ps",
+                   help="cú pháp PowerShell ($env:FOO = \"bar\")")
+    s.add_argument("--cmd", dest="format", action="store_const", const="cmd",
+                   help="cú pháp cmd.exe (set FOO=bar)")
+    s.set_defaults(format=None)
 
     add("serve", cmd_serve, "bật Ollama với cấu hình hub")
     add("stop", cmd_stop, "tắt Ollama")

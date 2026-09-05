@@ -1,6 +1,6 @@
 # Tải model từ nguồn online về AI Hub
 
-Mọi model tải về đều nằm trong `~/.aihub/models/` — **không bao giờ** vào thư mục dự án.
+Mọi model tải về đều nằm trong `models\` của hub — **không bao giờ** vào thư mục dự án.
 
 Dùng CLI (`aihub pull …`) hoặc tab **Thêm model** trên dashboard (`aihub web`).
 
@@ -9,7 +9,7 @@ Dùng CLI (`aihub pull …`) hoặc tab **Thêm model** trên dashboard (`aihub 
 | Nguồn | Lệnh | Rơi vào |
 |---|---|---|
 | Ollama registry | `aihub pull ollama:qwen3.5:9b` | `models/ollama/` |
-| HuggingFace (cả repo) | `aihub pull hf:mlx-community/whisper-large-v3-turbo` | `models/hf/hub/` |
+| HuggingFace (cả repo) | `aihub pull hf:Systran/faster-whisper-large-v3` | `models/hf/hub/` |
 | HuggingFace (lọc file) | `aihub pull hf:org/repo --include '*.safetensors' '*.json'` | `models/hf/hub/` |
 | HF — đúng 1 file GGUF | `aihub pull gguf:bartowski/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf` | `models/custom/gguf/` |
 | GitHub release | `aihub pull gh:owner/repo@v1.0/model.onnx` | `models/custom/` |
@@ -26,10 +26,13 @@ không tải gì**.
 aihub search VoxCPM
 ```
 ```
- ★ mlx-community/VoxCPM2-4bit          2.30 GB  ⬇389      ← ★ tối ưu Apple Silicon
- ◆ DennisHuang648/VoxCPM2-GGUF         6.80 GB  ⬇6,623    ← ◆ dùng được với Ollama
+ ★ DennisHuang648/VoxCPM2-GGUF         6.80 GB  ⬇6,623    ← ★ hợp với máy này
+ ◆ mlx-community/VoxCPM2-4bit          2.30 GB  ⬇389      ← ◆ định dạng khác
    openbmb/VoxCPM2                     4.96 GB  ⬇318,971
 ```
+
+Dấu ★ tuỳ theo hệ điều hành: trên Windows/Linux là **GGUF** (Ollama nạp được),
+trên macOS là **MLX**. Không phải danh sách cứng — `aihub` tự chọn theo máy đang chạy.
 
 Trên dashboard: gõ từ khoá rồi bấm **Tìm**, bấm một dòng là tự điền và xem trước.
 
@@ -81,25 +84,34 @@ Chênh **26 lần**.
 
 ### 3. Model gated cần token
 
-Llama và vài bản Gemma yêu cầu đăng nhập HuggingFace. Token lưu ở
-`~/.aihub/models/hf/token` (chmod 0600). **Không bao giờ** ghi token vào `registry.toml`.
+Llama và vài bản Gemma yêu cầu đăng nhập HuggingFace. Token do `huggingface_hub`
+quản lý trong `models\hf\token`. **Không bao giờ** ghi token vào `registry.toml` —
+`aihub doctor` lint điều này.
 
-```bash
-~/.aihub/.venv/bin/python -c "from huggingface_hub import login; login()"
+```powershell
+.\.venv\Scripts\python.exe -c "from huggingface_hub import login; login()"
 ```
 
-### 4. Chọn đúng định dạng cho M1 Pro
+### 4. Chọn đúng định dạng cho máy này (Windows + GTX 1060 6 GB)
 
 Nhanh nhất → chậm nhất:
 
 | Định dạng | Chạy bằng | Ghi chú |
 |---|---|---|
-| **MLX** | `mlx_whisper`, `mlx_lm` | Native Apple Silicon, dùng GPU Metal |
-| **GGUF** | Ollama | Tiện nhất cho LLM, có sẵn hạ tầng |
-| **CTranslate2** | `faster-whisper` | Tốt cho CPU với `int8` |
-| **PyTorch `.pt`** | `openai-whisper`, `transformers` | Chậm nhất trên máy này |
+| **GGUF** | Ollama / llama.cpp | Tiện nhất cho LLM, có sẵn hạ tầng, đẩy được layer lên CUDA |
+| **CTranslate2** | `faster-whisper` | ASR tốt nhất ở đây — `float16` trên CUDA, `int8` trên CPU |
+| **ONNX** | `onnxruntime` | Có provider CUDA/DirectML |
+| **PyTorch `.pt`** | `openai-whisper`, `transformers` | Chạy được nhưng nặng nhất |
+| **MLX** | — | **Không chạy.** Chỉ có trên Apple Silicon |
+
+Model MLX khai `platforms = ["macos"]` trong `registry.toml` nên `aihub` đánh dấu
+**⊘ khác nền tảng** và không cho tải.
 
 Cùng một model ở 3 định dạng là **3 bản sao đĩa** — không dedupe được. Chọn một.
+
+> VRAM 6 GB là trần thật. Model >6 GB vẫn chạy (Ollama tự chia layer giữa GPU và
+> CPU) nhưng chậm hơn nhiều. Muốn chạy hoàn toàn trên GPU thì chọn bản lượng tử
+> nhỏ hơn — ví dụ `--include '*Q4_K_S.gguf'` thay vì `Q4_K_M`.
 
 ### 5. Model tải xong tự vào thư viện
 
@@ -122,7 +134,7 @@ Entry tự sinh có mô tả tạm — mở `registry.toml` sửa lại cho rõ 
 ```toml
 [models.ten-goi-ngan]
 title   = "Tên hiển thị"
-runtime = "mlx"              # mlx | ollama | faster-whisper | hf-transformers | onnx | gguf
+runtime = "faster-whisper"   # ollama | faster-whisper | hf-transformers | onnx | gguf | mlx
 store   = "hf"               # hf | ollama | whisper | custom | ct2
 access  = ["path"]           # path | endpoint
 task    = "asr"              # chat | code | vision | asr | tts | image
@@ -136,6 +148,9 @@ owners  = []                 # dự án nào đang dùng
 kind = "hf"
 repo = "org/repo"
 ```
+
+Thêm `platforms = ["macos"]` (hoặc `["windows"]`, `["linux"]`) nếu runtime chỉ chạy
+trên một hệ điều hành. Bỏ trống nghĩa là chạy mọi nơi.
 
 Rồi chạy `aihub link` để tạo tên ổn định trong `models/links/`.
 

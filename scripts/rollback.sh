@@ -2,7 +2,7 @@
 # AI Hub — hoàn tác migrate.sh. Đưa dữ liệu về đúng cache mặc định ban đầu.
 set -euo pipefail
 
-HUB="/Users/mac/Documents/AI/AI Hub"
+HUB="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 STORE="$HUB/models"
 export OLLAMA_NOPRUNE=1
 
@@ -36,9 +36,6 @@ for pair in "${PAIRS[@]}"; do
 done
 
 [[ -L "$HOME/.aihub" ]] && rm "$HOME/.aihub" && ok "gỡ ~/.aihub"
-
-MPT="/Users/mac/Documents/AI/MoneyPrinterTurbo/models/whisper-large-v3"
-[[ -L "$MPT" ]] && rm "$MPT" && ok "gỡ symlink MoneyPrinterTurbo"
 
 launchctl unsetenv OLLAMA_MODELS 2>/dev/null || true
 launchctl unsetenv HF_HOME 2>/dev/null || true

@@ -5,31 +5,36 @@
 schema = 1
 
 [hub]
-root        = "/Users/mac/Documents/AI/AI Hub"   # nơi duy nhất có dấu cách
-home        = "/Users/mac/.aihub"
-store       = "/Users/mac/.aihub/models"
-default_llm = "qwen3.5"
-default_asr = "whisper-turbo-mlx"
+# Đường dẫn Windows dùng chuỗi TOML nháy đơn (literal) để dấu \ không bị hiểu là escape.
+# %USERPROFILE% được mở lúc chạy, nhờ vậy file này chép sang máy khác vẫn đúng.
+root        = 'E:\AI Hub'
+home        = '%USERPROFILE%\.aihub'   # bí danh không dấu cách, cho client Node & script
+store       = 'E:\AI Hub\models'
+default_llm = "qwen3-5"
+default_asr = "whisper-large-v3-ct2"   # MLX là Apple-only; trên Windows dùng CTranslate2
+
+# venv của các dự án cần client aihub. `aihub doctor` kiểm tra từng cái.
+projects    = []
 
 # ─────────────────────── Kho con & đường dẫn cũ được symlink về ───────────────────────
 [stores.ollama]
 path = "ollama"
-legacy = "/Users/mac/.ollama/models"
+legacy = '%USERPROFILE%\.ollama\models' 
 env = "OLLAMA_MODELS"
 
 [stores.hf]
 path = "hf"
-legacy = "/Users/mac/.cache/huggingface"
+legacy = '%USERPROFILE%\.cache\huggingface' 
 env = "HF_HOME"
 
 [stores.whisper]
 path = "whisper"
-legacy = "/Users/mac/.cache/whisper"
+legacy = '%USERPROFILE%\.cache\whisper' 
 env = "AIHUB_WHISPER_DIR"
 
 [stores.torch]
 path = "torch"
-legacy = "/Users/mac/.cache/torch"
+legacy = '%USERPROFILE%\.cache\torch' 
 env = "TORCH_HOME"
 
 [stores.ct2]
@@ -75,7 +80,7 @@ size_gb     = 6.59
 quant       = "Q4_K_M"
 ram_gb      = 8.0
 tags        = ["đa năng", "tiếng Việt tốt", "mặc định"]
-desc        = "LLM tổng quát. Cân bằng tốt nhất giữa chất lượng và RAM trên máy 16 GB — chạy xong còn dư ~4 GB cho việc khác."
+desc        = "LLM tổng quát, cân bằng tốt nhất giữa chất lượng và tài nguyên. Q4_K_M ~6,6 GB vượt 6 GB VRAM của GTX 1060 nên một phần layer chạy trên CPU — vẫn dùng tốt, chỉ chậm hơn."
 strengths   = ["viết & tóm tắt", "hỏi đáp", "trích xuất dữ liệu có cấu trúc"]
 owners      = []
 recommended = true
@@ -208,11 +213,11 @@ access      = ["path"]
 task        = "asr"
 size_gb     = 1.5
 ram_gb      = 2.0
-tags        = ["nhanh nhất", "tối ưu Apple Silicon", "mặc định"]
-desc        = "Chạy trên GPU Metal qua MLX. Nhanh nhất trên M1 Pro — đây là đường nhận dạng giọng nói nên dùng."
+platforms   = ["macos"]
+tags        = ["tối ưu Apple Silicon", "không chạy trên Windows"]
+desc        = "Chạy trên GPU Metal qua MLX — chỉ có trên Apple Silicon. Trên máy Windows này dùng whisper-large-v3-ct2 thay thế."
 strengths   = ["chuyển giọng nói thành chữ", "đa ngôn ngữ", "có timestamp"]
 owners      = ["Test 1 - Whisper", "Editing-Video-Pipeline-4.0-gemma"]
-recommended = true
 [models.whisper-turbo-mlx.source]
 kind = "hf"
 repo = "mlx-community/whisper-large-v3-turbo"
@@ -229,17 +234,19 @@ size_gb = 2.9
 ram_gb  = 3.5
 quant   = "float16"
 aliases = ["large-v3", "whisper-large-v3"]
-tags    = ["chính xác cao", "chạy CPU"]
-desc    = "Bản CTranslate2 cho faster-whisper. Chính xác hơn turbo một chút, chạy được trên CPU với int8."
-strengths = ["phụ đề chính xác", "chạy nền CPU"]
+tags    = ["chính xác cao", "chạy CPU", "mặc định"]
+desc    = "Bản CTranslate2 cho faster-whisper. Chạy CPU với int8, hoặc CUDA nếu có GPU NVIDIA. Đây là đường ASR mặc định trên Windows."
+strengths = ["phụ đề chính xác", "chạy nền CPU", "dùng được CUDA"]
 owners  = ["MoneyPrinterTurbo"]
+recommended = true
 [models.whisper-large-v3-ct2.source]
 kind = "hf"
 repo = "Systran/faster-whisper-large-v3"
 [models.whisper-large-v3-ct2.expose]
 ct2          = "large-v3"
 link         = "faster-whisper-large-v3"
-project_link = "/Users/mac/Documents/AI/MoneyPrinterTurbo/models/whisper-large-v3"
+# project_link: thêm lại khi dự án tồn tại trên máy này, ví dụ
+# project_link = 'E:\du-an\MoneyPrinterTurbo\models\whisper-large-v3' 
 
 [models.whisper-medium-ct2]
 title             = "Whisper Medium (CTranslate2)"
@@ -266,8 +273,9 @@ access            = ["path"]
 task              = "asr"
 size_gb           = 2.9
 ram_gb            = 3.5
-tags              = ["bản cũ", "có thể dọn"]
-desc              = "Bị thay thế bởi bản -turbo mà code thực sự dùng. Xoá thu hồi 2.9 GB."
+platforms         = ["macos"]
+tags              = ["bản cũ", "tối ưu Apple Silicon", "có thể dọn"]
+desc              = "Bị thay thế bởi bản -turbo. Chỉ chạy trên Apple Silicon."
 owners            = []
 archive_candidate = true
 [models.whisper-large-v3-mlx.source]

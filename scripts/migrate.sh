@@ -6,7 +6,7 @@
 #     Nếu nó chạy giữa lúc manifest đã dời mà blob chưa, ~46 GB sẽ bị xoá.
 set -euo pipefail
 
-HUB="/Users/mac/Documents/AI/AI Hub"
+HUB="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 STORE="$HUB/models"
 STATE="$HUB/.migration-state.json"
 export OLLAMA_NOPRUNE=1
@@ -52,7 +52,7 @@ for pair in "${PAIRS[@]}"; do
 
   if [[ -L "$SRC" ]]; then
     LINK="$(readlink "$SRC")"
-    if [[ "$LINK" == "$DST" || "$LINK" == "/Users/mac/.aihub/models/${pair##*|}" ]]; then
+    if [[ "$LINK" == "$DST" || "$LINK" == "$HOME/.aihub/models/${pair##*|}" ]]; then
       ok "$SRC → đã trỏ về hub, bỏ qua"; continue
     fi
     die "$SRC là symlink nhưng trỏ tới $LINK — xử lý thủ công"
@@ -61,7 +61,7 @@ for pair in "${PAIRS[@]}"; do
   if [[ ! -e "$SRC" ]]; then
     warn "$SRC không tồn tại — chỉ tạo symlink"
     mkdir -p "$DST" "$(dirname "$SRC")"
-    ln -s "/Users/mac/.aihub/models/${pair##*|}" "$SRC"
+    ln -s "$DST" "$SRC"
     continue
   fi
 
@@ -75,7 +75,7 @@ for pair in "${PAIRS[@]}"; do
   info "chuyển $SRC ($SZ) → $DST"
   mv "$SRC" "$DST"                                   # cùng volume APFS ⇒ rename tức thì
   mkdir -p "$(dirname "$SRC")"
-  ln -s "/Users/mac/.aihub/models/${pair##*|}" "$SRC"
+  ln -s "$DST" "$SRC"
   MOVED+=("$SRC")
   ok "xong: $SRC → hub"
 done
@@ -92,16 +92,16 @@ else
 fi
 
 # ── 6. Ghi lại trạng thái để rollback ─────────────────────────────────────────
-"$HUB/.venv/bin/python" - "$STATE" <<'PY'
+AIHUB_HUB="$HUB" "$HUB/.venv/bin/python" - "$STATE" <<'PY'
 import json, os, sys, datetime
 state = {
     "migrated_at": datetime.datetime.now().isoformat(timespec="seconds"),
-    "hub": "/Users/mac/Documents/AI/AI Hub",
+    "hub": os.environ["AIHUB_HUB"],
     "pairs": [
-        {"legacy": "/Users/mac/.ollama/models",     "store": "ollama"},
-        {"legacy": "/Users/mac/.cache/huggingface", "store": "hf"},
-        {"legacy": "/Users/mac/.cache/whisper",     "store": "whisper"},
-        {"legacy": "/Users/mac/.cache/torch",       "store": "torch"},
+        {"legacy": os.path.expanduser("~/.ollama/models"),     "store": "ollama"},
+        {"legacy": os.path.expanduser("~/.cache/huggingface"), "store": "hf"},
+        {"legacy": os.path.expanduser("~/.cache/whisper"),     "store": "whisper"},
+        {"legacy": os.path.expanduser("~/.cache/torch"),       "store": "torch"},
     ],
 }
 json.dump(state, open(sys.argv[1], "w"), indent=2)

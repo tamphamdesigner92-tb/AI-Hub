@@ -1,23 +1,35 @@
 #!/bin/sh
-# Mở dashboard AI Hub. Tự bật server nếu chưa chạy.
-AIHUB_HOME="${AIHUB_HOME:-/Users/mac/.aihub}"
+# Mở dashboard AI Hub (POSIX). Tự bật server nếu chưa chạy.
+# Trên Windows dùng bin\aihubdashboard.cmd.
+if [ -z "$AIHUB_HOME" ]; then
+  AIHUB_HOME="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+fi
 PORT="${AIHUB_WEB_PORT:-7860}"
+URL="http://127.0.0.1:$PORT"
 
-if ! curl -sf -m 2 "http://127.0.0.1:$PORT/api/status" >/dev/null 2>&1; then
+PY="$AIHUB_HOME/.venv/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+
+if ! curl -sf -m 2 "$URL/api/status" >/dev/null 2>&1; then
   echo "Đang bật dashboard…"
   mkdir -p "$AIHUB_HOME/models/run"
-  nohup "$AIHUB_HOME/.venv/bin/python" "$AIHUB_HOME/web/server.py" "$PORT" \
-        >> "$AIHUB_HOME/models/run/web.log" 2>&1 &
-  for i in 1 2 3 4 5 6 7 8 9 10; do
+  AIHUB_HOME="$AIHUB_HOME" nohup "$PY" "$AIHUB_HOME/web/server.py" "$PORT" --no-open \
+      >> "$AIHUB_HOME/models/run/web.log" 2>&1 &
+  i=0
+  while [ $i -lt 15 ]; do
     sleep 0.4
-    curl -sf -m 2 "http://127.0.0.1:$PORT/api/status" >/dev/null 2>&1 && break
+    curl -sf -m 2 "$URL/api/status" >/dev/null 2>&1 && break
+    i=$((i + 1))
   done
 fi
 
-# dùng tên aihubdashboard nếu đã khai trong /etc/hosts, không thì 127.0.0.1
-HOSTNAME_URL="http://127.0.0.1:$PORT"
-grep -qE '^[^#]*[[:space:]]aihubdashboard([[:space:]]|$)' /etc/hosts 2>/dev/null \
-  && HOSTNAME_URL="http://aihubdashboard:$PORT"
+if ! curl -sf -m 2 "$URL/api/status" >/dev/null 2>&1; then
+  echo "Server không lên được. Xem log: $AIHUB_HOME/models/run/web.log" >&2
+  exit 1
+fi
 
-echo "$HOSTNAME_URL"
-open "$HOSTNAME_URL"
+echo "$URL"
+# open (macOS) → xdg-open (Linux) → start (Git Bash trên Windows)
+command -v open >/dev/null 2>&1 && exec open "$URL"
+command -v xdg-open >/dev/null 2>&1 && exec xdg-open "$URL"
+command -v start >/dev/null 2>&1 && exec start "$URL"

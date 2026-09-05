@@ -126,3 +126,7 @@ Icon?
 *.ckpt
 *.mlmodel
 *.mlpackage/
+
+# --- Kho blob của airepo, dự án cũ ở đường dẫn này ---
+# Không thuộc AI Hub nhưng vẫn nằm trên đĩa (~15 GB). Giữ ngoài git.
+registry/

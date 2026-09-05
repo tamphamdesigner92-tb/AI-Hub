@@ -1,5 +1,16 @@
 #!/bin/sh
-# AI Hub CLI. Chạy bằng venv riêng của hub để không phụ thuộc venv dự án.
-AIHUB_HOME="${AIHUB_HOME:-/Users/mac/.aihub}"
-exec "$AIHUB_HOME/.venv/bin/python" -c \
-  "import sys; sys.path.insert(0, '$AIHUB_HOME/clients/python/src'); from aihub.cli import main; sys.exit(main())" "$@"
+# AI Hub CLI (POSIX: macOS, Linux, Git Bash, WSL).
+# Trên Windows dùng bin\aihub.cmd — cùng hành vi.
+#
+# Gốc hub suy ra từ vị trí script, không hardcode: chép hub sang máy khác hay ổ
+# khác vẫn chạy đúng.
+if [ -z "$AIHUB_HOME" ]; then
+  AIHUB_HOME="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+fi
+
+# Ưu tiên venv riêng của hub để `aihub pull` không phụ thuộc venv dự án đang mở.
+PY="$AIHUB_HOME/.venv/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+
+AIHUB_HOME="$AIHUB_HOME" exec "$PY" -c \
+  "import sys, os; sys.path.insert(0, os.path.join(os.environ['AIHUB_HOME'], 'clients', 'python', 'src')); from aihub.cli import main; sys.exit(main())" "$@"

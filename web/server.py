@@ -16,11 +16,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-HUB = Path(os.environ.get("AIHUB_HOME", "/Users/mac/.aihub"))
+# Suy ra gốc hub từ vị trí file này (<hub>/web/server.py) — server chạy được
+# trước khi client aihub được cài vào bất kỳ venv nào.
+HUB = Path(os.environ.get("AIHUB_HOME") or Path(__file__).resolve().parents[1])
 sys.path.insert(0, str(HUB / "clients" / "python" / "src"))
 
 from aihub import doctor as D           # noqa: E402
 from aihub import fetch as F            # noqa: E402
+from aihub import plat as P             # noqa: E402
 from aihub import resolve as R          # noqa: E402
 
 WEB = HUB / "web"
@@ -28,35 +31,11 @@ MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=ut
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
 
 
-def _ram_gb() -> float:
-    out = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True)
-    return int(out.stdout.strip()) / 1e9 if out.stdout.strip() else 0.0
-
-
-def _ram_free_gb() -> float:
-    """RAM khả dụng ≈ free + inactive + speculative (trang có thể thu hồi ngay)."""
-    out = subprocess.run(["vm_stat"], capture_output=True, text=True).stdout
-    pg, vals = 16384, {}
-    for line in out.splitlines():
-        if "page size of" in line:
-            pg = int(line.split("page size of")[1].split()[0])
-        if ":" in line:
-            k, v = line.split(":", 1)
-            v = v.strip().rstrip(".")
-            if v.isdigit():
-                vals[k.strip()] = int(v)
-    free = vals.get("Pages free", 0) + vals.get("Pages inactive", 0) \
-        + vals.get("Pages speculative", 0)
-    return free * pg / 1e9
-
-
 def api_status() -> dict:
     store = R.store_root()
-    st = os.statvfs(store)
     sizes = {}
-    for sub in sorted(p for p in store.iterdir() if p.is_dir()):
-        o = subprocess.run(["du", "-sk", str(sub)], capture_output=True, text=True)
-        sizes[sub.name] = (int(o.stdout.split()[0]) if o.stdout.strip() else 0) / 1e6
+    for d in sorted(p for p in store.iterdir() if p.is_dir()):
+        sizes[d.name] = P.dir_size_bytes(d) / 1e9
 
     base = os.environ.get("AIHUB_OLLAMA_URL", "http://127.0.0.1:11434")
     ollama_up, loaded = False, []
@@ -69,13 +48,14 @@ def api_status() -> dict:
     except Exception:
         pass
 
+    ram_total, ram_free = P.ram_gb()
     return {
         "store": str(store),
         "store_gb": round(sum(sizes.values()), 1),
         "by_store": {k: round(v, 2) for k, v in sizes.items() if v > 0.01},
-        "free_gb": round(st.f_bavail * st.f_frsize / 1e9),
-        "ram_gb": round(_ram_gb()),
-        "ram_free_gb": round(_ram_free_gb(), 1),
+        "free_gb": round(P.free_bytes(store) / 1e9),
+        "ram_gb": round(ram_total),
+        "ram_free_gb": round(ram_free, 1),
         "ollama_up": ollama_up,
         "loaded": loaded,
     }
@@ -161,17 +141,27 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path == "/api/serve":
                 env = {**os.environ, **R.env_dict()}
-                ollama = shutil.which("ollama") or "/usr/local/bin/ollama"
-                log = (R.store_root() / "run" / "ollama.log").open("a")
-                p = subprocess.Popen([ollama, "serve"], env=env, stdout=log,
-                                     stderr=log, start_new_session=True)
-                (R.store_root() / "run" / "ollama.pid").write_text(str(p.pid))
+                ollama = P.ollama_bin()
+                if not ollama:
+                    return self._err("không tìm thấy lệnh ollama", 400)
+                log = R.store_root() / "run" / "ollama.log"
+                p = P.spawn_detached([ollama, "serve"], env, log)
+                (R.store_root() / "run" / "ollama.pid").write_text(
+                    str(p.pid), encoding="utf-8")
                 return self._json({"ok": True, "pid": p.pid})
             if u.path == "/api/adopt":
                 return self._json({"ok": True, "added": F.adopt_all()})
             if u.path == "/api/stop":
-                subprocess.run(["pkill", "-x", "ollama"])
-                return self._json({"ok": True})
+                pidf = R.store_root() / "run" / "ollama.pid"
+                pid = None
+                if pidf.exists():
+                    try:
+                        pid = int(pidf.read_text(encoding="utf-8").strip())
+                    except ValueError:
+                        pass
+                ok = P.kill_ollama(pid)
+                pidf.unlink(missing_ok=True)
+                return self._json({"ok": ok})
             return self._err("không có route", 404)
         except Exception as e:
             return self._err(e, 500)
@@ -184,9 +174,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             mi = R.get(name)
             if mi.runtime == "ollama":
-                subprocess.run([shutil.which("ollama") or "/usr/local/bin/ollama",
-                                "rm", mi.ref], env={**os.environ, **R.env_dict()},
-                               check=True)
+                subprocess.run([P.ollama_bin() or "ollama", "rm", mi.ref],
+                               env={**os.environ, **R.env_dict()}, check=True)
             elif mi.path:
                 p = Path(mi.path)
                 tgt = p if mi.store == "whisper" else p.parents[1]
@@ -236,6 +225,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int = 7860, open_browser: bool = True):
+    P.init_console()
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}"
     print(f"AI Hub dashboard → {url}   (Ctrl-C để dừng)")
@@ -248,5 +238,30 @@ def serve(port: int = 7860, open_browser: bool = True):
         srv.shutdown()
 
 
+def _main(argv: list[str]) -> None:
+    """Điểm vào khi chạy nền.
+
+    Khởi động bằng pythonw (không có cửa sổ console) thì stdout không đi đâu cả,
+    nên phải tự ghi ra file — nếu không, server chết lúc khởi động sẽ im lặng
+    hoàn toàn và không có gì để chẩn đoán.
+    """
+    port = 7860
+    open_browser = True
+    for arg in argv:
+        if arg == "--no-open":
+            open_browser = False
+        elif arg.isdigit():
+            port = int(arg)
+
+    if not sys.stdout or not sys.stdout.isatty():
+        log = R.store_root() / "run" / "web.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        fh = log.open("a", encoding="utf-8", errors="replace")
+        sys.stdout = sys.stderr = fh
+        open_browser = False        # tiến trình nền không mở được trình duyệt
+
+    serve(port, open_browser=open_browser)
+
+
 if __name__ == "__main__":
-    serve(int(sys.argv[1]) if len(sys.argv) > 1 else 7860)
+    _main(sys.argv[1:])

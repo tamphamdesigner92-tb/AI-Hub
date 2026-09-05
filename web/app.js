@@ -10,7 +10,8 @@ let MODELS = [], STATUS = {}, F = { q: '', task: null, status: null };
 const TASK_LABEL = { chat:'Trò chuyện', code:'Lập trình', vision:'Thị giác',
                      asr:'Giọng nói → chữ', tts:'Chữ → giọng nói', image:'Sinh ảnh' };
 const BADGE = { present:['b-present','● có sẵn'], missing:['b-missing','○ chưa tải'],
-                cloud:['b-cloud','☁ cloud'], partial:['b-missing','◐ thiếu file'] };
+                cloud:['b-cloud','☁ cloud'], partial:['b-missing','◐ thiếu file'],
+                unsupported:['b-missing','⊘ khác nền tảng'] };
 
 function toast(msg, ms = 2600) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
@@ -53,7 +54,7 @@ function card(m) {
   const tight = m.ram_gb > 0 && STATUS.ram_free_gb && m.ram_gb > STATUS.ram_free_gb;
   const el = document.createElement('article');
   el.className = 'card' + (tight && m.status === 'present' ? ' warnram' : '')
-               + (m.status === 'missing' ? ' dim' : '');
+               + (m.status === 'missing' || m.status === 'unsupported' ? ' dim' : '');
   el.innerHTML = `
     <div class="chead">
       <div class="ctitle">${m.recommended ? '<span class="star">★</span> ' : ''}${m.title}</div>
@@ -112,6 +113,7 @@ function card(m) {
   } else if (m.status === 'missing') {
     btn('Tải về', '', () => { showView('add'); $('#src').value = m.name; preview(); });
   }
+  // status 'unsupported': không có nút tải — runtime của nó không chạy trên máy này.
   return el;
 }
 
@@ -245,10 +247,10 @@ async function doSearch() {
   try {
     const rows = await api('/api/search?q=' + encodeURIComponent(q));
     if (!rows.length) { box.innerHTML = `<div class="rhead">Không thấy gì cho "${q}".</div>`; return; }
-    box.innerHTML = `<div class="rhead">${rows.length} kết quả — <b>★</b> tối ưu Apple Silicon (M1 Pro) ·
+    box.innerHTML = `<div class="rhead">${rows.length} kết quả — <b>★</b> hợp với máy này ·
         <b>◆</b> GGUF dùng được với Ollama. Bấm một dòng để xem trước.</div>` +
       rows.map(r => `<button class="rrow" data-spec="${r.spec}">
-          <span class="rmark">${r.mlx ? '★' : r.gguf ? '◆' : ''}</span>
+          <span class="rmark">${r.preferred ? '★' : (r.gguf || r.mlx) ? '◆' : ''}</span>
           <span class="rid">${r.id}</span>
           <span class="rsz">${r.gb ? r.gb.toFixed(2) + ' GB' : '?'}</span>
           <span class="rdl">⬇${r.downloads.toLocaleString('vi-VN')}</span>

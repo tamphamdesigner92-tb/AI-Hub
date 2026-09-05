@@ -8,7 +8,9 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-HUB_HOME = Path(os.environ.get("AIHUB_HOME", "/Users/mac/.aihub"))
+from . import plat
+
+HUB_HOME = plat.hub_root()
 REGISTRY = HUB_HOME / "registry.toml"
 
 
@@ -38,13 +40,14 @@ class ModelInfo:
     ref: str | None = None
     file: str | None = None
     aliases: list[str] = field(default_factory=list)
+    platforms: list[str] = field(default_factory=list)   # rỗng = chạy mọi nơi
     source: dict = field(default_factory=dict)
     expose: dict = field(default_factory=dict)
     local: bool = True
     recommended: bool = False
     archive_candidate: bool = False
     # tính lúc chạy
-    status: str = "unknown"        # present | missing | cloud | partial
+    status: str = "unknown"        # present | missing | cloud | partial | unsupported
     path: str | None = None
     disk_gb: float | None = None
     undeclared: bool = False       # có trên đĩa nhưng chưa khai trong registry.toml
@@ -113,7 +116,7 @@ def _hf_snapshot(repo: str, revision: str = "main") -> Path | None:
         return None
     ref = base / "refs" / revision
     if ref.is_file():
-        sha = ref.read_text().strip()
+        sha = ref.read_text(encoding="utf-8").strip()
         cand = snaps / sha
         if cand.is_dir():
             return cand
@@ -196,17 +199,7 @@ def resolve_endpoint(name: str) -> Endpoint:
 # ─────────────────────── trạng thái & liệt kê ───────────────────────
 
 def _du_gb(p: Path) -> float:
-    total = 0
-    if p.is_file():
-        return p.stat().st_size / 1e9
-    for root, _dirs, files in os.walk(p, followlinks=False):
-        for f in files:
-            fp = Path(root) / f
-            try:
-                total += fp.stat().st_size
-            except OSError:
-                pass
-    return total / 1e9
+    return plat.dir_size_bytes(p) / 1e9
 
 
 def _ollama_manifest(ref: str) -> Path:
@@ -231,7 +224,7 @@ def _ollama_du_gb(ref: str) -> float | None:
     if not man.is_file():
         return None
     try:
-        d = json.loads(man.read_text())
+        d = json.loads(man.read_text(encoding="utf-8"))
     except Exception:
         return None
     blobs = Path(os.environ.get("OLLAMA_MODELS", str(store_dir("ollama")))) / "blobs"
@@ -264,6 +257,7 @@ def get(name: str, with_disk: bool = False) -> ModelInfo:
         ref=spec.get("ref"),
         file=spec.get("file"),
         aliases=spec.get("aliases", []),
+        platforms=spec.get("platforms", []),
         source=spec.get("source", {}),
         expose=spec.get("expose", {}),
         local=spec.get("local", True),
@@ -273,6 +267,12 @@ def get(name: str, with_disk: bool = False) -> ModelInfo:
 
     if not mi.local:
         mi.status = "cloud"
+        return mi
+
+    # Runtime bó vào một hệ điều hành (MLX chỉ có trên Apple Silicon). Báo thẳng
+    # thay vì để nó hiện "chưa tải" — tải về cũng không chạy được.
+    if mi.platforms and plat.PLATFORM not in mi.platforms:
+        mi.status = "unsupported"
         return mi
 
     if mi.runtime == "ollama":
@@ -325,11 +325,13 @@ def env_dict() -> dict[str, str]:
     envfile = HUB_HOME / "env" / "aihub.env"
     out: dict[str, str] = {}
     if envfile.is_file():
-        for line in envfile.read_text().splitlines():
+        for line in envfile.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
-                out[k] = v
+                # Giá trị có thể ghi %USERPROFILE% / $HOME để file chép được
+                # giữa các máy; mở ra trước khi truyền cho tiến trình con.
+                out[k] = os.path.expandvars(v)
     return out
 
 
@@ -356,7 +358,7 @@ def _readme_meta(snap: Path) -> dict:
     if not rd.is_file():
         return {}
     try:
-        txt = rd.read_text(errors="ignore")
+        txt = rd.read_text(encoding="utf-8", errors="ignore")
     except OSError:
         return {}
     if not txt.startswith("---"):

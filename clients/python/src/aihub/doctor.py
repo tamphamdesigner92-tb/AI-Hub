@@ -8,7 +8,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from .resolve import HUB_HOME, load_registry, store_dir, store_root, get, load_registry
+from . import plat
+from .resolve import HUB_HOME, load_registry, store_dir, store_root, get
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 
@@ -30,10 +31,15 @@ class Report:
 
 
 def _readlink(p: Path) -> str | None:
+    return plat.link_target(p)
+
+
+def _same(a, b) -> bool:
+    """So sánh hai đường dẫn bất kể hoa/thường và dấu gạch — Windows cần cả hai."""
     try:
-        return os.readlink(p)
+        return Path(a).resolve() == Path(b).resolve()
     except OSError:
-        return None
+        return False
 
 
 def run(deep: bool = False) -> Report:
@@ -41,19 +47,43 @@ def run(deep: bool = False) -> Report:
     reg = load_registry(refresh=True)
     store = store_root()
 
-    # ── 1. hub & symlink khử dấu cách ────────────────────────────────────
+    # ── 1. gốc hub ───────────────────────────────────────────────────────
+    # registry.toml khai gốc hub; HUB_HOME thì suy ra từ vị trí file code. Hai
+    # cái lệch nhau nghĩa là đang chạy code của hub này nhưng đọc registry của
+    # hub khác — mọi số liệu bên dưới sẽ vô nghĩa, nên đây là FAIL.
     hub_real = Path(reg["hub"]["root"])
-    if HUB_HOME.is_symlink() and Path(_readlink(HUB_HOME) or "") == hub_real:
-        r.add(PASS, "~/.aihub", f"→ {hub_real}")
-    elif HUB_HOME.exists():
-        r.add(FAIL, "~/.aihub", "tồn tại nhưng không phải symlink tới hub")
+    if not HUB_HOME.exists():
+        r.add(FAIL, "gốc hub", f"không tồn tại: {HUB_HOME}")
+    elif _same(HUB_HOME, hub_real):
+        r.add(PASS, "gốc hub", str(HUB_HOME))
     else:
-        r.add(FAIL, "~/.aihub", "chưa tạo — chạy scripts/migrate.sh")
+        r.add(FAIL, "gốc hub",
+              f"code chạy từ {HUB_HOME} nhưng registry.toml khai {hub_real}")
+
+    # Bí danh không dấu cách. Bắt buộc trên macOS (launchctl/PATH); trên Windows
+    # chỉ là tiện lợi cho client Node và script — thiếu thì chỉ WARN.
+    alias = plat.expand(reg["hub"].get("home") or (Path.home() / ".aihub"))
+    if plat.is_link(alias) and _same(_readlink(alias) or "", hub_real):
+        r.add(PASS, f"bí danh {alias.name}", f"→ {hub_real}")
+    elif alias.exists():
+        r.add(WARN, f"bí danh {alias.name}",
+              "tồn tại nhưng không phải liên kết tới hub")
+    else:
+        r.add(WARN, f"bí danh {alias.name}",
+              "chưa tạo — chạy `aihub migrate` (client Node cần nó)")
+
+    # Máy có tạo được symlink không: quyết định junction hay symlink ở mọi nơi.
+    if plat.WINDOWS:
+        if plat.can_symlink():
+            r.add(PASS, "quyền tạo symlink", "có (Developer Mode hoặc admin)")
+        else:
+            r.add(WARN, "quyền tạo symlink",
+                  "không có → hub dùng junction cho thư mục, hardlink cho file "
+                  "(hoạt động bình thường)")
 
     # ── 2. kho & dung lượng ──────────────────────────────────────────────
     if store.is_dir():
-        st = os.statvfs(store)
-        free = st.f_bavail * st.f_frsize / 1e9
+        free = plat.free_bytes(store) / 1e9
         lvl = PASS if free > 20 else (WARN if free > 10 else FAIL)
         r.add(lvl, "đĩa trống", f"{free:.0f} GB")
     else:
@@ -64,25 +94,26 @@ def run(deep: bool = False) -> Report:
         legacy = sd.get("legacy")
         if not legacy:
             continue
-        lp, want = Path(legacy), f"/Users/mac/.aihub/models/{sd['path']}"
-        if lp.is_symlink():
+        lp = Path(os.path.expandvars(legacy)).expanduser()
+        label = f"liên kết {lp.name}"
+        if plat.is_link(lp):
             tgt = _readlink(lp)
-            if Path(tgt or "").resolve() == (store / sd["path"]).resolve():
-                r.add(PASS, f"symlink {legacy}", f"→ {tgt}")
+            if _same(tgt or "", store / sd["path"]):
+                r.add(PASS, label, f"{lp} → {tgt}")
             else:
-                r.add(FAIL, f"symlink {legacy}", f"trỏ sai: {tgt}")
+                r.add(FAIL, label, f"trỏ sai: {tgt}")
         elif lp.is_dir():
-            r.add(FAIL, f"symlink {legacy}",
-                  "là THƯ MỤC THẬT — kho bị tách đôi, model sẽ tải lại")
+            r.add(FAIL, label,
+                  f"{lp} là THƯ MỤC THẬT — kho bị tách đôi, model sẽ tải lại")
         else:
-            r.add(WARN, f"symlink {legacy}", "chưa migrate")
+            r.add(WARN, label, f"{lp} chưa migrate")
 
     # ── 4. biến môi trường ───────────────────────────────────────────────
     envfile = HUB_HOME / "env" / "aihub.env"
     if envfile.is_file():
         want = dict(
             line.split("=", 1)
-            for line in envfile.read_text().splitlines()
+            for line in envfile.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.startswith("#") and "=" in line
         )
         miss = [k for k, v in want.items() if os.environ.get(k) != v]
@@ -92,7 +123,9 @@ def run(deep: bool = False) -> Report:
             r.add(WARN, "biến môi trường",
                   f"{len(miss)} chưa nạp trong shell này: {', '.join(miss[:4])}"
                   + ("…" if len(miss) > 4 else "")
-                  + "  → mở terminal mới hoặc: . ~/.aihub/env/aihub.sh")
+                  + "  → mở terminal mới, hoặc nạp: "
+                  + (r". $env:AIHUB_HOME\env\aihub.ps1" if plat.WINDOWS
+                     else ". ~/.aihub/env/aihub.sh"))
         # lint secret
         bad = [k for k in want if any(s in k.lower()
                for s in ("key", "token", "secret", "password"))]
@@ -101,30 +134,55 @@ def run(deep: bool = False) -> Report:
     else:
         r.add(FAIL, "env/aihub.env", "chưa có")
 
-    # env của tiến trình GUI (launchctl) — khác với env của zsh
-    try:
-        gui = subprocess.run(["launchctl", "getenv", "OLLAMA_MODELS"],
-                             capture_output=True, text=True, timeout=5).stdout.strip()
-        r.add(PASS if gui else WARN, "launchctl OLLAMA_MODELS",
-              gui or "chưa đặt (app GUI dựa vào symlink — vẫn OK)")
-    except Exception:
-        pass
+    # Env của app khởi động từ GUI. Trên macOS là launchctl; trên Windows là
+    # biến người dùng trong registry — app bấm từ Start Menu đọc chỗ đó, không
+    # đọc biến đặt tạm trong phiên terminal.
+    if plat.WINDOWS:
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as k:
+                try:
+                    gui = winreg.QueryValueEx(k, "OLLAMA_MODELS")[0]
+                except FileNotFoundError:
+                    gui = ""
+            r.add(PASS if gui else WARN, "biến người dùng OLLAMA_MODELS",
+                  gui or "chưa đặt (app GUI dựa vào junction — vẫn OK)")
+        except Exception:
+            pass
+    else:
+        try:
+            gui = subprocess.run(["launchctl", "getenv", "OLLAMA_MODELS"],
+                                 capture_output=True, text=True, timeout=5).stdout.strip()
+            r.add(PASS if gui else WARN, "launchctl OLLAMA_MODELS",
+                  gui or "chưa đặt (app GUI dựa vào symlink — vẫn OK)")
+        except Exception:
+            pass
 
     # ── 5. toàn vẹn cache HuggingFace ────────────────────────────────────
+    # huggingface_hub bình thường để snapshots/ là symlink trỏ vào blobs/. Trên
+    # Windows không có quyền symlink thì nó copy file thật vào snapshot — hợp lệ,
+    # chỉ tốn thêm đĩa. Vì vậy "0 symlink" không phải lỗi ở đây.
     hf_hub = Path(os.environ.get("HF_HOME", str(store_dir("hf")))) / "hub"
     if hf_hub.is_dir():
-        dangling, total = [], 0
+        dangling, total, plain = [], 0, 0
         for repo in hf_hub.glob("models--*"):
             for snap in (repo / "snapshots").glob("*/*"):
                 if snap.is_symlink():
                     total += 1
                     if not snap.resolve().exists():
                         dangling.append(str(snap))
+                elif snap.is_file():
+                    plain += 1
         if dangling:
-            r.add(FAIL, "symlink snapshot HF",
-                  f"{len(dangling)}/{total} đứt — dấu hiệu bị `cp -R`")
+            r.add(FAIL, "snapshot HF",
+                  f"{len(dangling)}/{total} symlink đứt — dấu hiệu bị copy sai cách")
+        elif total:
+            r.add(PASS, "snapshot HF", f"{total} symlink còn nguyên")
+        elif plain:
+            r.add(PASS, "snapshot HF",
+                  f"{plain} file thật (Windows không symlink — bình thường)")
         else:
-            r.add(PASS, "symlink snapshot HF", f"{total} symlink còn nguyên")
+            r.add(WARN, "snapshot HF", "chưa có snapshot nào")
     else:
         r.add(WARN, "cache HF", "chưa có")
 
@@ -138,7 +196,7 @@ def run(deep: bool = False) -> Report:
                 continue
             n += 1
             try:
-                d = json.loads(f.read_text())
+                d = json.loads(f.read_text(encoding="utf-8"))
             except Exception:
                 bad.append(str(f)); continue
             for layer in (d.get("layers") or []) + [d.get("config") or {}]:
@@ -213,36 +271,54 @@ def run(deep: bool = False) -> Report:
     except (urllib.error.URLError, OSError):
         r.add(WARN, "Ollama service", f"không chạy ở {base} — `aihub serve` để bật")
 
-    # ── 9. Time Machine ──────────────────────────────────────────────────
-    try:
-        out = subprocess.run(["tmutil", "isexcluded", str(store)],
-                             capture_output=True, text=True, timeout=5).stdout
-        if "[Excluded]" in out:
-            r.add(PASS, "Time Machine", "kho đã được loại trừ")
-        else:
-            r.add(WARN, "Time Machine",
-                  f'chưa loại trừ → sudo tmutil addexclusion -p "{store}"')
-    except Exception:
-        pass
+    # ── 9. loại kho khỏi backup / quét virus ─────────────────────────────
+    # Trọng số model là file lớn, bất biến, tải lại được. Để công cụ backup hay
+    # antivirus quét chúng là tốn IO thuần tuý.
+    if plat.WINDOWS:
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "(Get-MpPreference).ExclusionPath -join ';'"],
+                capture_output=True, text=True, timeout=20).stdout.strip()
+            paths = [x.strip().rstrip("\\").lower() for x in out.split(";") if x.strip()]
+            if str(store).rstrip("\\").lower() in paths:
+                r.add(PASS, "loại trừ Defender", "kho đã được loại trừ")
+            else:
+                r.add(WARN, "loại trừ Defender",
+                      "chưa loại trừ → chạy PowerShell quyền admin: "
+                      f'Add-MpPreference -ExclusionPath "{store}"')
+        except Exception:
+            pass
+    else:
+        try:
+            out = subprocess.run(["tmutil", "isexcluded", str(store)],
+                                 capture_output=True, text=True, timeout=5).stdout
+            if "[Excluded]" in out:
+                r.add(PASS, "Time Machine", "kho đã được loại trừ")
+            else:
+                r.add(WARN, "Time Machine",
+                      f'chưa loại trừ → sudo tmutil addexclusion -p "{store}"')
+        except Exception:
+            pass
 
     # ── 10. client đã cài vào venv dự án chưa ────────────────────────────
-    venvs = [
-        "/Users/mac/Documents/AI/MoneyPrinterTurbo/.venv/bin/python",
-        "/Users/mac/Documents/AI/video editing/Test 1 - Whisper/.venv/bin/python",
-        "/Users/mac/Documents/AI/video editing/Test 1 - Whisper/.venv/bin/python3.14",
-    ]
-    for py in venvs:
-        if not Path(py).exists():
+    # Danh sách dự án nằm trong registry.toml ([hub].projects) chứ không hardcode
+    # — mỗi máy có bố cục thư mục khác nhau.
+    for entry in reg.get("hub", {}).get("projects", []):
+        venv = Path(os.path.expandvars(entry)).expanduser()
+        py = plat.venv_python(venv)
+        if not py.exists():
+            r.add(WARN, f"venv dự án · {venv.parent.name}", f"không thấy {py}")
             continue
-        label = Path(py).parents[2].name + "/" + Path(py).name
+        label = venv.parent.name
         try:
-            out = subprocess.run([py, "-c", "import aihub;print(aihub.__version__)"],
-                                 capture_output=True, text=True, timeout=20)
+            out = subprocess.run([str(py), "-c", "import aihub;print(aihub.__version__)"],
+                                 capture_output=True, text=True, timeout=30)
             if out.returncode == 0:
                 r.add(PASS, f"import aihub · {label}", out.stdout.strip())
             else:
                 r.add(WARN, f"import aihub · {label}",
-                      f"chưa cài → aihub install --python '{Path(py).parents[1]}'")
+                      f'chưa cài → aihub install --python "{venv}"')
         except Exception as e:
             r.add(WARN, f"import aihub · {label}", str(e)[:60])
 
