@@ -78,6 +78,24 @@ def store_dir(kind: str) -> Path:
     return store_root() / sub
 
 
+def hf_home() -> Path:
+    """Thư mục HF_HOME mà hub muốn dùng."""
+    return Path(os.environ.get("HF_HOME") or store_dir("hf"))
+
+
+def hf_hub_cache() -> Path:
+    """Nơi huggingface_hub cất repo đã tải (`<HF_HOME>/hub`).
+
+    Mọi chỗ đọc VÀ ghi cache HF đều phải đi qua đây. Trước kia mỗi nơi tự ghép
+    `HF_HOME/hub` một kiểu, còn `hf_pull` thì trông chờ vào việc đặt biến môi
+    trường — mà huggingface_hub đã chốt đường dẫn cache ngay lúc import, nên đặt
+    biến sau đó không có tác dụng: model tải về rơi vào cache mặc định của người
+    dùng thay vì kho hub, và hub không nhìn thấy nó.
+    """
+    env = os.environ.get("HF_HUB_CACHE")
+    return Path(env) if env else hf_home() / "hub"
+
+
 def _lookup(name: str) -> tuple[str, dict]:
     """Tra theo tên chính hoặc alias."""
     models = load_registry().get("models", {})
@@ -109,7 +127,7 @@ def _hf_snapshot(repo: str, revision: str = "main") -> Path | None:
     Đường dẫn snapshot chứa commit SHA và đổi mỗi lần tải lại, nên phải đi qua
     refs/ chứ không hardcode. Thiếu refs thì lấy snapshot mới nhất.
     """
-    hub = Path(os.environ.get("HF_HOME", str(store_dir("hf")))) / "hub"
+    hub = hf_hub_cache()
     base = hub / ("models--" + repo.replace("/", "--"))
     snaps = base / "snapshots"
     if not snaps.is_dir():
@@ -425,7 +443,7 @@ def discover() -> list[ModelInfo]:
     found: list[ModelInfo] = []
 
     # ── HuggingFace ──
-    hub = Path(os.environ.get("HF_HOME", str(store_dir("hf")))) / "hub"
+    hub = hf_hub_cache()
     if hub.is_dir():
         for d in sorted(hub.glob("models--*")):
             repo = d.name[len("models--"):].replace("--", "/")

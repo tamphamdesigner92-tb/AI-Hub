@@ -20,7 +20,8 @@ import urllib.request
 from pathlib import Path
 
 from . import plat
-from .resolve import HUB_HOME, load_registry, store_dir, store_root
+from .resolve import (HUB_HOME, hf_home, hf_hub_cache, load_registry,
+                      store_dir, store_root)
 
 MIN_FREE_GB = 20.0
 
@@ -86,10 +87,17 @@ def hf_pull(repo: str, revision: str = "main",
         return prev
     _check_space(prev["total_gb"])
     from huggingface_hub import snapshot_download
-    os.environ.setdefault("HF_HOME", str(store_dir("hf")))
+    cache = hf_hub_cache()
+    cache.mkdir(parents=True, exist_ok=True)
+    # cache_dir tường minh, KHÔNG dựa vào biến môi trường: huggingface_hub đọc
+    # HF_HOME một lần lúc import, mà lúc này nó đã được import từ hf_preview() ở
+    # trên rồi. Đặt biến ở đây là quá muộn — đó chính là lý do model từng rơi vào
+    # cache mặc định trên ổ hệ thống.
+    os.environ.setdefault("HF_XET_CACHE", str(hf_home() / "xet"))
     p = snapshot_download(
         repo_id=repo, revision=revision,
         allow_patterns=include, ignore_patterns=exclude,
+        cache_dir=str(cache),
     )
     return Path(p)
 
@@ -105,7 +113,10 @@ def gguf_pull(repo: str, filename: str, dry_run: bool = False) -> Path | dict:
     from huggingface_hub import hf_hub_download
     dest = store_dir("custom") / "gguf"
     dest.mkdir(parents=True, exist_ok=True)
-    p = hf_hub_download(repo_id=repo, filename=filename, local_dir=str(dest))
+    cache = hf_hub_cache()
+    cache.mkdir(parents=True, exist_ok=True)
+    p = hf_hub_download(repo_id=repo, filename=filename,
+                        local_dir=str(dest), cache_dir=str(cache))
     return Path(p)
 
 

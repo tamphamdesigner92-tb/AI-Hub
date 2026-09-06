@@ -9,7 +9,8 @@ import urllib.request
 from pathlib import Path
 
 from . import plat
-from .resolve import HUB_HOME, load_registry, store_dir, store_root, get
+from .resolve import (HUB_HOME, get, hf_hub_cache, load_registry, store_dir,
+                      store_root)
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 
@@ -178,7 +179,16 @@ def run(deep: bool = False) -> Report:
     # huggingface_hub bình thường để snapshots/ là symlink trỏ vào blobs/. Trên
     # Windows không có quyền symlink thì nó copy file thật vào snapshot — hợp lệ,
     # chỉ tốn thêm đĩa. Vì vậy "0 symlink" không phải lỗi ở đây.
-    hf_hub = Path(os.environ.get("HF_HOME", str(store_dir("hf")))) / "hub"
+    # Model tải về sẽ rơi vào đâu. Nằm ngoài kho hub nghĩa là hub sẽ không thấy
+    # nó — đúng triệu chứng "tải xong mà tab Model không hiện".
+    hf_hub = hf_hub_cache()
+    try:
+        inside = store_root().resolve() in hf_hub.resolve().parents
+    except OSError:
+        inside = False
+    r.add(PASS if inside else FAIL, "đích tải HF",
+          str(hf_hub) + ("" if inside else "  — NGOÀI kho hub, tải xong sẽ không hiện"))
+
     if hf_hub.is_dir():
         dangling, total, plain = [], 0, 0
         for repo in hf_hub.glob("models--*"):
